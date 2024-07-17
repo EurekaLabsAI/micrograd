@@ -23,3 +23,7 @@ TODOs:
 - streamlit app for interactive demo, including the original micrograd repo goodies: showing the computational graph
 - parallel implementation `pytorch_reference.py` in PyTorch that prints the exact same results as micrograd.py
 - parallel implementation in C that prints the same thing
+
+### License
+
+MIT
