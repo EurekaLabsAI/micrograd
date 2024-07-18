@@ -5,24 +5,31 @@ to 3 classes (red, green, blue) using a simple multilayer perceptron (MLP).
 import math
 
 # -----------------------------------------------------------------------------
-# utils for random number generation and sampling
 
-def random_u32(state):
-    # xorshift rng: https://en.wikipedia.org/wiki/Xorshift#xorshift.2A
-    # doing & 0xFFFFFFFFFFFFFFFF is the same as cast to uint64 in C
-    # doing & 0xFFFFFFFF is the same as cast to uint32 in C
-    state[0] ^= (state[0] >> 12) & 0xFFFFFFFFFFFFFFFF
-    state[0] ^= (state[0] << 25) & 0xFFFFFFFFFFFFFFFF
-    state[0] ^= (state[0] >> 27) & 0xFFFFFFFFFFFFFFFF
-    return ((state[0] * 0x2545F4914F6CDD1D) >> 32) & 0xFFFFFFFF
+# class that mimics the random interface in Python, fully deterministic,
+# and in a way that we also control fully, and can also use in C, etc.
+class RNG:
+    def __init__(self, seed):
+        self.state = seed
 
-def random_f32(state):
-    # random float32 in [0,1)
-    return (random_u32(state) >> 8) / 16777216.0
+    def random_u32(self):
+        # xorshift rng: https://en.wikipedia.org/wiki/Xorshift#xorshift.2A
+        # doing & 0xFFFFFFFFFFFFFFFF is the same as cast to uint64 in C
+        # doing & 0xFFFFFFFF is the same as cast to uint32 in C
+        self.state ^= (self.state >> 12) & 0xFFFFFFFFFFFFFFFF
+        self.state ^= (self.state << 25) & 0xFFFFFFFFFFFFFFFF
+        self.state ^= (self.state >> 27) & 0xFFFFFFFFFFFFFFFF
+        return ((self.state * 0x2545F4914F6CDD1D) >> 32) & 0xFFFFFFFF
 
-def randf(a, b, state):
-    # random float32 in [a,b)
-    return a + (b-a) * random_f32(state)
+    def random(self):
+        # random float32 in [0, 1)
+        return (self.random_u32() >> 8) / 16777216.0
+
+    def uniform(self, a=0.0, b=1.0):
+        # random float32 in [a, b)
+        return a + (b-a) * self.random()
+
+random = RNG(42)
 
 # -----------------------------------------------------------------------------
 # Value
@@ -149,23 +156,8 @@ class Value:
     def __repr__(self):
         return f"Value(data={self.data}, grad={self.grad})"
 
-
-def nll_loss(logits, target):
-    # TODO subtract max for numerical stability
-    # 1) evaluate elementwise e^x
-    ex = [x.exp() for x in logits]
-    # 2) compute the sum of the above
-    denom = sum(ex)
-    # 3) normalize by the sum to get probabilities
-    probs = [x / denom for x in ex]
-    # 4) log the probabilities at target
-    logp = (probs[target]).log()
-    # 5) the negative log likelihood loss (invert so we get a loss - lower is better)
-    nll = -logp
-    return nll
-
 # -----------------------------------------------------------------------------
-# MLP network
+# Multi-Layer Perceptron (MLP) network
 
 class Module:
 
@@ -179,7 +171,7 @@ class Module:
 class Neuron(Module):
 
     def __init__(self, nin, nonlin=True):
-        r = randf(-1, 1, RNG_STATE) * nin**-0.5
+        r = random.uniform(-1, 1) * nin**-0.5
         self.w = [Value(r) for _ in range(nin)]
         self.b = Value(0)
         self.nonlin = nonlin
@@ -227,15 +219,33 @@ class MLP(Module):
         return f"MLP of [{', '.join(str(layer) for layer in self.layers)}]"
 
 # -----------------------------------------------------------------------------
+# loss function: the negative log likelihood (NLL) loss
+
+def nll_loss(logits, target):
+    # subtract the max for numerical stability (avoids overflow)
+    max_val = max(val.data for val in logits)
+    logits = [val - max_val for val in logits]
+    # 1) evaluate elementwise e^x
+    ex = [x.exp() for x in logits]
+    # 2) compute the sum of the above
+    denom = sum(ex)
+    # 3) normalize by the sum to get probabilities
+    probs = [x / denom for x in ex]
+    # 4) log the probabilities at target
+    logp = (probs[target]).log()
+    # 5) the negative log likelihood loss (invert so we get a loss - lower is better)
+    nll = -logp
+    return nll
+
+# -----------------------------------------------------------------------------
 # let's train!
-RNG_STATE = [42]
 
 # generate a random dataset with 100 2-dimensional datapoints in 3 classes
 def gen_data(n=100):
     pts = []
     for _ in range(n):
-        x = randf(-2, 2, RNG_STATE)
-        y = randf(-2, 2, RNG_STATE)
+        x = random.uniform(-2.0, 2.0)
+        y = random.uniform(-2.0, 2.0)
         # concentric circles
         # label = 0 if x**2 + y**2 < 1 else 1 if x**2 + y**2 < 2 else 2
         # very simple dataset
