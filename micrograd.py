@@ -258,49 +258,50 @@ def gen_data(n=100):
     return tr, val, te
 train_split, val_split, test_split = gen_data()
 
-# init the model: 2D inputs, 16 neurons, 3 outputs (logits)
-model = MLP(2, [16, 3])
+def main():
+    # init the model: 2D inputs, 16 neurons, 3 outputs (logits)
+    model = MLP(2, [16, 3])
 
-def eval_split(model, split):
-    # evaluate the loss of a split
-    loss = Value(0)
-    for x, y in split:
-        logits = model([Value(x[0]), Value(x[1])])
-        loss += nll_loss(logits, y)
-    loss = loss * (1.0/len(split)) # normalize the loss
-    return loss.data
+    def eval_split(model, split):
+        # evaluate the loss of a split
+        loss = Value(0)
+        for x, y in split:
+            logits = model([Value(x[0]), Value(x[1])])
+            loss += nll_loss(logits, y)
+        loss = loss * (1.0/len(split)) # normalize the loss
+        return loss.data
 
-# optimize using Adam
-learning_rate = 1e-1
-beta1 = 0.9
-beta2 = 0.95
-weight_decay = 1e-4
-for p in model.parameters():
-    p.m = 0.0
-    p.v = 0.0
-
-# train
-for step in range(100):
-
-    # evaluate the validation split every few steps
-    if step % 10 == 0:
-        val_loss = eval_split(model, val_split)
-        print(f"step {step}, val loss {val_loss}")
-
-    # forward the network (get logits of all training datapoints)
-    loss = Value(0)
-    for x, y in train_split:
-        logits = model([Value(x[0]), Value(x[1])])
-        loss += nll_loss(logits, y)
-    loss = loss * (1.0/len(train_split)) # normalize the loss
-    # backward pass (deposit the gradients)
-    loss.backward()
-    # update with Adam
+    # optimize using Adam
+    learning_rate = 1e-1
+    beta1 = 0.9
+    beta2 = 0.95
+    weight_decay = 1e-4
     for p in model.parameters():
-        p.m = beta1 * p.m + (1 - beta1) * p.grad
-        p.v = beta2 * p.v + (1 - beta2) * p.grad**2
-        p.data -= learning_rate * p.m / (p.v**0.5 + 1e-8)
-        p.data -= weight_decay * p.data # weight decay
-    model.zero_grad()
+        p.m = 0.0
+        p.v = 0.0
 
-    print(f"step {step}, train loss {loss.data}")
+    # train
+    for step in range(100):
+
+        # evaluate the validation split every few steps
+        if step % 10 == 0:
+            val_loss = eval_split(model, val_split)
+            print(f"step {step}, val loss {val_loss}")
+
+        # forward the network (get logits of all training datapoints)
+        loss = Value(0)
+        for x, y in train_split:
+            logits = model([Value(x[0]), Value(x[1])])
+            loss += nll_loss(logits, y)
+        loss = loss * (1.0/len(train_split)) # normalize the loss
+        # backward pass (deposit the gradients)
+        loss.backward()
+        # update with Adam
+        for p in model.parameters():
+            p.m = beta1 * p.m + (1 - beta1) * p.grad
+            p.v = beta2 * p.v + (1 - beta2) * p.grad**2
+            p.data -= learning_rate * p.m / (p.v**0.5 + 1e-8)
+            p.data -= weight_decay * p.data # weight decay
+        model.zero_grad()
+
+        print(f"step {step}, train loss {loss.data}")
