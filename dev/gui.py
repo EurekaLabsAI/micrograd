@@ -199,7 +199,9 @@ def train_model(model, data, n_iters):
 
 st.sidebar.markdown("## Training options")
 model_layers_text = st.sidebar.text_input(
-    "Model layers", "[16]", help="List of hidden layer sizes. Default is [16]."
+    "Model layers",
+    "[16]",
+    help="List of hidden layer sizes. Default is [16]. The output layer of 3 neurons is added automatically to the end.",
 )
 
 n_iters = st.sidebar.number_input("Number of iterations", 1, 100, 50)
