@@ -215,13 +215,7 @@ def cross_entropy(logits, target):
     return nll
 
 # -----------------------------------------------------------------------------
-# let's train!
-
-# generate a random dataset with 100 2-dimensional datapoints in 3 classes
-train_split, val_split, test_split = gen_data(random, n=100)
-
-# init the model: 2D inputs, 16 neurons, 3 outputs (logits)
-model = MLP(2, [16, 3])
+# evaluation utility to compute the loss on a given split of the dataset
 
 def eval_split(model, split):
     # evaluate the loss of a split
@@ -231,6 +225,15 @@ def eval_split(model, split):
         loss += cross_entropy(logits, y)
     loss = loss * (1.0/len(split)) # normalize the loss
     return loss.data
+
+# -----------------------------------------------------------------------------
+# let's train!
+
+# generate a random dataset with 100 2-dimensional datapoints in 3 classes
+train_split, val_split, test_split = gen_data(random, n=100)
+
+# init the model: 2D inputs, 16 neurons, 3 outputs (logits)
+model = MLP(2, [16, 3])
 
 # optimize using Adam
 learning_rate = 1e-1
@@ -264,6 +267,6 @@ for step in range(100):
         m_hat = p.m / (1 - beta1**(step+1))  # bias correction
         v_hat = p.v / (1 - beta2**(step+1))
         p.data -= learning_rate * (m_hat / (v_hat**0.5 + 1e-8) + weight_decay * p.data)
-    model.zero_grad()
+    model.zero_grad() # never forget to clear those gradients! happens to everyone
 
     print(f"step {step}, train loss {loss.data}")
