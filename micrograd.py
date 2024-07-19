@@ -171,8 +171,7 @@ class Module:
 class Neuron(Module):
 
     def __init__(self, nin, nonlin=True):
-        r = random.uniform(-1, 1) * nin**-0.5
-        self.w = [Value(r) for _ in range(nin)]
+        self.w = [Value(random.uniform(-1, 1) * nin**-0.5) for _ in range(nin)]
         self.b = Value(0)
         self.nonlin = nonlin
 
@@ -285,7 +284,7 @@ for step in range(100):
     # evaluate the validation split every few steps
     if step % 10 == 0:
         val_loss = eval_split(model, val_split)
-        print(f"step {step}, val loss {val_loss}")
+        print(f"step {step}, val loss {val_loss:.6f}")
 
     # forward the network (get logits of all training datapoints)
     loss = Value(0)
@@ -295,12 +294,14 @@ for step in range(100):
     loss = loss * (1.0/len(train_split)) # normalize the loss
     # backward pass (deposit the gradients)
     loss.backward()
-    # update with Adam
+    # update with AdamW
     for p in model.parameters():
         p.m = beta1 * p.m + (1 - beta1) * p.grad
         p.v = beta2 * p.v + (1 - beta2) * p.grad**2
-        p.data -= learning_rate * p.m / (p.v**0.5 + 1e-8)
+        m_hat = p.m / (1 - beta1**(step+1))  # bias correction
+        v_hat = p.v / (1 - beta2**(step+1))
+        p.data -= learning_rate * m_hat / (v_hat**0.5 + 1e-8)
         p.data -= weight_decay * p.data # weight decay
     model.zero_grad()
 
-    print(f"step {step}, train loss {loss.data}")
+    print(f"step {step}, train loss {loss.data:.6f}")
