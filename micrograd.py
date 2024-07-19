@@ -196,8 +196,9 @@ class MLP(Module):
 
 # -----------------------------------------------------------------------------
 # loss function: the negative log likelihood (NLL) loss
+# NLL loss = CrossEntropy loss when the targets are one-hot vectors
 
-def nll_loss(logits, target):
+def cross_entropy(logits, target):
     # subtract the max for numerical stability (avoids overflow)
     max_val = max(val.data for val in logits)
     logits = [val - max_val for val in logits]
@@ -227,7 +228,7 @@ def eval_split(model, split):
     loss = Value(0)
     for x, y in split:
         logits = model([Value(x[0]), Value(x[1])])
-        loss += nll_loss(logits, y)
+        loss += cross_entropy(logits, y)
     loss = loss * (1.0/len(split)) # normalize the loss
     return loss.data
 
@@ -252,7 +253,7 @@ for step in range(100):
     loss = Value(0)
     for x, y in train_split:
         logits = model([Value(x[0]), Value(x[1])])
-        loss += nll_loss(logits, y)
+        loss += cross_entropy(logits, y)
     loss = loss * (1.0/len(train_split)) # normalize the loss
     # backward pass (deposit the gradients)
     loss.backward()
@@ -262,8 +263,7 @@ for step in range(100):
         p.v = beta2 * p.v + (1 - beta2) * p.grad**2
         m_hat = p.m / (1 - beta1**(step+1))  # bias correction
         v_hat = p.v / (1 - beta2**(step+1))
-        p.data -= learning_rate * m_hat / (v_hat**0.5 + 1e-8)
-        p.data -= weight_decay * p.data # weight decay
+        p.data -= learning_rate * (m_hat / (v_hat**0.5 + 1e-8) + weight_decay * p.data)
     model.zero_grad()
 
-    print(f"step {step}, train loss {loss.data:.6f}")
+    print(f"step {step}, train loss {loss.data}")
