@@ -5,7 +5,7 @@
 
 In this module we build a tiny "autograd" engine (short for automatic gradient) that implements the backpropagation algorithm, as it was prominently popularized for training neural networks in the 1986 paper [Learning Internal Representations by Error Propagation](https://stanford.edu/~jlmcc/papers/PDP/Volume%201/Chap8_PDP86.pdf) by Rumelhart, Hinton and Williams. This repository builds on the earlier repo [karpathy/micrograd](https://github.com/karpathy/micrograd), but modifies into into an LLM101n module.
 
-The code we build here is the heart of neural network training - it allows us to calculate how we should update the parameters of a neural network in order to make it better at some task, such as the one of next token prediction in autoregressive language models. This exact same algorithm is used in all modern deep learning libraries, such as PyTorch, TensorFlow, JAX, and others., except that those libraries are much more optimized and feature-rich.
+The code we build here is the heart of neural network training - it allows us to calculate how we should update the parameters of a neural network in order to make it better at some task, such as the one of next token prediction in autoregressive language models. This exact same algorithm is used in all modern deep learning libraries, such as PyTorch, TensorFlow, JAX, and others, except that those libraries are much more optimized and feature-rich.
 
 !WIP!
 
