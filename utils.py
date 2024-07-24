@@ -24,15 +24,17 @@ class RNG:
         return a + (b-a) * self.random()
 
 # generate a random dataset with 100 2-dimensional datapoints in 3 classes
-def gen_data(random: RNG, n=100):
+def gen_data(random: RNG, n=100, type='simple'):
     pts = []
     for _ in range(n):
         x = random.uniform(-2.0, 2.0)
         y = random.uniform(-2.0, 2.0)
-        # concentric circles
-        # label = 0 if x**2 + y**2 < 1 else 1 if x**2 + y**2 < 2 else 2
-        # very simple dataset
-        label = 0 if x < 0 else 1 if y < 0 else 2
+        if type == 'circle':
+            # concentric circles
+            label = 0 if x**2 + y**2 < 1 else 1 if x**2 + y**2 < 2 else 2
+        else:
+            # very simple dataset
+            label = 0 if x < 0 else 1 if y < 0 else 2
         pts.append(([x, y], label))
     # create train/val/test splits of the data (80%, 10%, 10%)
     tr = pts[:int(0.8*n)]

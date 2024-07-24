@@ -229,44 +229,45 @@ def eval_split(model, split):
 # -----------------------------------------------------------------------------
 # let's train!
 
-# generate a random dataset with 100 2-dimensional datapoints in 3 classes
-train_split, val_split, test_split = gen_data(random, n=100)
+def main():
+    # generate a random dataset with 100 2-dimensional datapoints in 3 classes
+    train_split, val_split, test_split = gen_data(random, n=100)
 
-# init the model: 2D inputs, 16 neurons, 3 outputs (logits)
-model = MLP(2, [16, 3])
+    # init the model: 2D inputs, 16 neurons, 3 outputs (logits)
+    model = MLP(2, [16, 3])
 
-# optimize using Adam
-learning_rate = 1e-1
-beta1 = 0.9
-beta2 = 0.95
-weight_decay = 1e-4
-for p in model.parameters():
-    p.m = 0.0
-    p.v = 0.0
-
-# train
-for step in range(100):
-
-    # evaluate the validation split every few steps
-    if step % 10 == 0:
-        val_loss = eval_split(model, val_split)
-        print(f"step {step}, val loss {val_loss:.6f}")
-
-    # forward the network (get logits of all training datapoints)
-    loss = Value(0)
-    for x, y in train_split:
-        logits = model([Value(x[0]), Value(x[1])])
-        loss += cross_entropy(logits, y)
-    loss = loss * (1.0/len(train_split)) # normalize the loss
-    # backward pass (deposit the gradients)
-    loss.backward()
-    # update with AdamW
+    # optimize using Adam
+    learning_rate = 1e-1
+    beta1 = 0.9
+    beta2 = 0.95
+    weight_decay = 1e-4
     for p in model.parameters():
-        p.m = beta1 * p.m + (1 - beta1) * p.grad
-        p.v = beta2 * p.v + (1 - beta2) * p.grad**2
-        m_hat = p.m / (1 - beta1**(step+1))  # bias correction
-        v_hat = p.v / (1 - beta2**(step+1))
-        p.data -= learning_rate * (m_hat / (v_hat**0.5 + 1e-8) + weight_decay * p.data)
-    model.zero_grad() # never forget to clear those gradients! happens to everyone
+        p.m = 0.0
+        p.v = 0.0
 
-    print(f"step {step}, train loss {loss.data}")
+    # train
+    for step in range(100):
+
+        # evaluate the validation split every few steps
+        if step % 10 == 0:
+            val_loss = eval_split(model, val_split)
+            print(f"step {step}, val loss {val_loss:.6f}")
+
+        # forward the network (get logits of all training datapoints)
+        loss = Value(0)
+        for x, y in train_split:
+            logits = model([Value(x[0]), Value(x[1])])
+            loss += cross_entropy(logits, y)
+        loss = loss * (1.0/len(train_split)) # normalize the loss
+        # backward pass (deposit the gradients)
+        loss.backward()
+        # update with AdamW
+        for p in model.parameters():
+            p.m = beta1 * p.m + (1 - beta1) * p.grad
+            p.v = beta2 * p.v + (1 - beta2) * p.grad**2
+            m_hat = p.m / (1 - beta1**(step+1))  # bias correction
+            v_hat = p.v / (1 - beta2**(step+1))
+            p.data -= learning_rate * (m_hat / (v_hat**0.5 + 1e-8) + weight_decay * p.data)
+        model.zero_grad() # never forget to clear those gradients! happens to everyone
+
+        print(f"step {step}, train loss {loss.data}")
