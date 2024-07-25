@@ -5,28 +5,12 @@ import time
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
-from modules import MLP, RNG, Value, gen_data
 from plotly.subplots import make_subplots
 from pyvis.network import Network
 from streamlit.components.v1 import html
 
-
-def cross_entropy(logits, target):
-    # subtract the max for numerical stability (avoids overflow)
-    max_val = max(val.data for val in logits)
-    logits = [val - max_val for val in logits]
-    # 1) evaluate elementwise e^x
-    ex = [x.exp() for x in logits]
-    # 2) compute the sum of the above
-    denom = sum(ex)
-    # 3) normalize by the sum to get probabilities
-    probs = [x / denom for x in ex]
-    # 4) log the probabilities at target
-    logp = (probs[target]).log()
-    # 5) the negative log likelihood loss (invert so we get a loss - lower is better)
-    nll = -logp
-    return nll
-
+# This is imported separately to avoid redefining classes when the script is reloaded
+from modules import MLP, RNG, Value, gen_data
 
 # Constants
 LEARNING_RATE = 1e-1
@@ -90,6 +74,22 @@ def init_session_state(MODEL_CONFIG, GEN_DATA_TYPE, SEED):
 
 
 # Model operations
+def cross_entropy(logits, target):
+    # subtract the max for numerical stability (avoids overflow)
+    max_val = max(val.data for val in logits)
+    logits = [val - max_val for val in logits]
+    # 1) evaluate elementwise e^x
+    ex = [x.exp() for x in logits]
+    # 2) compute the sum of the above
+    denom = sum(ex)
+    # 3) normalize by the sum to get probabilities
+    probs = [x / denom for x in ex]
+    # 4) log the probabilities at target
+    logp = (probs[target]).log()
+    # 5) the negative log likelihood loss (invert so we get a loss - lower is better)
+    nll = -logp
+    return nll
+
 def forward_pass(model, data):
     loss = Value(0)
     last_loss = loss
@@ -121,6 +121,7 @@ def backward_pass(model, loss, step):
     return model, loss
 
 
+# Training functions
 def train_step():
     train_last_loss, train_loss, _, _ = forward_pass(
         st.session_state.model, st.session_state.data["train"]
@@ -304,7 +305,7 @@ def plot_accuracy_curves():
     )
     return fig
 
-
+# Visualization of the computational graph
 def trace(root):
     nodes, edges, levels = set(), set(), {}
 
@@ -379,7 +380,7 @@ def draw_dot(root):
     return G
 
 
-# Main app
+# Main app entrypoint
 def main():
     st.set_page_config(layout="wide", page_title="Neural Network Playground")
     st.markdown("# Neural Network Playground")
@@ -387,6 +388,7 @@ def main():
         "This app demonstrates how a neural network learns to classify data points. It is based on the [micrograd](https://github.com/EurekaLabsAI/micrograd) repository. The objective is to visualize the training process, and show how the model learns through backpropagation."
     )
 
+    # User input section
     inp_col1, inp_col2, inp_col3 = st.columns(3)
     with inp_col1:
         GEN_DATA_TYPE = st.selectbox(
@@ -461,6 +463,7 @@ def main():
                 del st.session_state[key]
             init_session_state(MODEL_CONFIG, GEN_DATA_TYPE)
 
+    # Backward pass :: Computational graph view
     with st.container(border=True):
         st.markdown("## Computational Graph")
         st.write(
@@ -476,6 +479,7 @@ def main():
             else:
                 st.write("No graph to display yet. Please train the model.")
 
+    # Forward  pass :: Decision boundary, neuron activations, loss curves
     with st.container(border=True):
         st.markdown("## Model Visualization")
         decision_boundary_col, activation_col, loss_curve_col = st.columns(3)
