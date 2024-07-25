@@ -1,16 +1,32 @@
 import ast
-import sys
+import re
 import time
 
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
+from modules import MLP, RNG, Value, gen_data
 from plotly.subplots import make_subplots
+from pyvis.network import Network
+from streamlit.components.v1 import html
 
-sys.path.append(".")
 
-from micrograd import MLP, Value, cross_entropy
-from utils import RNG, gen_data
+def cross_entropy(logits, target):
+    # subtract the max for numerical stability (avoids overflow)
+    max_val = max(val.data for val in logits)
+    logits = [val - max_val for val in logits]
+    # 1) evaluate elementwise e^x
+    ex = [x.exp() for x in logits]
+    # 2) compute the sum of the above
+    denom = sum(ex)
+    # 3) normalize by the sum to get probabilities
+    probs = [x / denom for x in ex]
+    # 4) log the probabilities at target
+    logp = (probs[target]).log()
+    # 5) the negative log likelihood loss (invert so we get a loss - lower is better)
+    nll = -logp
+    return nll
+
 
 # Constants
 LEARNING_RATE = 1e-1
@@ -30,9 +46,9 @@ def init_model(MODEL_CONFIG):
 
 
 # Initialize session state
-def init_session_state(MODEL_CONFIG, GEN_DATA_TYPE):
+def init_session_state(MODEL_CONFIG, GEN_DATA_TYPE, SEED):
     if "data" not in st.session_state:
-        train_data, val_data, test_data = gen_data(RNG(42), n=300, type=GEN_DATA_TYPE)
+        train_data, val_data, test_data = gen_data(RNG(SEED), n=300, type=GEN_DATA_TYPE)
         st.session_state.data = {
             "train": train_data,
             "val": val_data,
@@ -47,6 +63,9 @@ def init_session_state(MODEL_CONFIG, GEN_DATA_TYPE):
 
     if "train_loss" not in st.session_state:
         st.session_state.train_loss = 0
+
+    if "train_last_loss" not in st.session_state:
+        st.session_state.train_last_loss = None
 
     if "val_loss" not in st.session_state:
         st.session_state.val_loss = 0
@@ -73,10 +92,13 @@ def init_session_state(MODEL_CONFIG, GEN_DATA_TYPE):
 # Model operations
 def forward_pass(model, data):
     loss = Value(0)
+    last_loss = loss
     predicted_outputs = []
     for x, y in data:
-        logits = model([Value(x[0]), Value(x[1])])
-        loss += cross_entropy(logits, y)
+        logits = model([Value(x[0], layer_name="[I0]"), Value(x[1], layer_name="[I1]")])
+        last_loss = cross_entropy(logits, y)
+        loss += last_loss
+
         predicted_outputs.append(np.argmax([logit.data for logit in logits]))
     loss = loss * (1.0 / len(data))
 
@@ -84,7 +106,7 @@ def forward_pass(model, data):
         [1 for i, (_, y) in enumerate(data) if y == predicted_outputs[i]]
     ) / len(data)
 
-    return loss, predicted_outputs, accuracy
+    return last_loss, loss, predicted_outputs, accuracy
 
 
 def backward_pass(model, loss, step):
@@ -96,26 +118,27 @@ def backward_pass(model, loss, step):
         v_hat = p.v / (1 - BETA2 ** (step + 1))
         p.data -= LEARNING_RATE * (m_hat / (v_hat**0.5 + 1e-8) + WEIGHT_DECAY * p.data)
     model.zero_grad()
-    return model
+    return model, loss
 
 
 def train_step():
-    train_loss, _, _ = forward_pass(
+    train_last_loss, train_loss, _, _ = forward_pass(
         st.session_state.model, st.session_state.data["train"]
     )
-    st.session_state.model = backward_pass(
+    st.session_state.model, train_loss = backward_pass(
         st.session_state.model, train_loss, st.session_state.step
     )
     st.session_state.step += 1
     st.session_state.train_loss = train_loss.data
+    st.session_state.train_last_loss = train_last_loss
 
-    val_loss, _, val_acc = forward_pass(
+    _, val_loss, _, val_acc = forward_pass(
         st.session_state.model, st.session_state.data["val"]
     )
     st.session_state.val_loss = val_loss.data
     st.session_state.val_acc = val_acc
 
-    test_loss, _, test_acc = forward_pass(
+    _, test_loss, _, test_acc = forward_pass(
         st.session_state.model, st.session_state.data["test"]
     )
     st.session_state.test_loss = test_loss.data
@@ -282,6 +305,80 @@ def plot_accuracy_curves():
     return fig
 
 
+def trace(root):
+    nodes, edges, levels = set(), set(), {}
+
+    def build(v, level=0):
+        # Iterate over a given node, check if it's already in the set of nodes, if not, add it
+        if v not in nodes:
+            nodes.add(v)
+            # Use the operation as a fallback for the layer name if it's missing
+            levels[v] = level
+            # If node contains children, then 1. add an edge, 2. recursively look at the child nodes for their children
+            for child in v._prev:
+                edges.add((child, v))
+                build(child, level + 1)
+
+    build(root)
+    return nodes, edges, levels
+
+
+def draw_dot(root):
+    G = Network(
+        directed=True,
+        layout=True,
+        cdn_resources="remote",
+    )
+
+    nodes, edges, levels = trace(root)
+
+    for n in nodes:
+        # Generate unique identifier for each node
+        uid = str(id(n))
+
+        def get_node_color(node):
+            # Get the color of the node based on the layer name
+            # W is blue, B is yellow, I is black
+
+            if re.search(r"W\d]$", node.layer_name):
+                return "green"
+            elif re.search(r"B]$", node.layer_name):
+                return "yellow"
+            elif re.search(r"^\[I\d]$", node.layer_name):
+                return "red"
+            elif node.layer_name == "const":
+                return "gray"
+            else:
+                return "lightblue"
+
+        G.add_node(
+            uid,
+            label=f"Level: {levels[n]}\nData: {n.data:.4f}\nGrad: {n.grad:.4f}",
+            title=f"{n}",
+            level=levels[n],
+            shape="box",
+            color=get_node_color(n),
+        )
+
+        if n._op:
+            # If value is the result of an operation, add a node for it and an edge from the operation to the final value
+            op_uid = uid + n._op
+            G.add_node(
+                op_uid, label=n._op, title=f"{n}", level=levels[n], shape="ellipse"
+            )
+
+            G.add_edge(op_uid, uid)
+
+    for n1, n2 in edges:
+        # For end node, add an edge from the initial value to the operator node, identified by the `uid` + `operator`
+        G.add_edge(str(id(n1)), str(id(n2)) + n2._op)
+
+    G.options.layout.hierarchical.direction = "RL"
+    G.options.layout.hierarchical.levelSeparation = 300
+
+    return G
+
+
 # Main app
 def main():
     st.set_page_config(layout="wide", page_title="Neural Network Playground")
@@ -290,7 +387,7 @@ def main():
         "This app demonstrates how a neural network learns to classify data points. It is based on the [micrograd](https://github.com/EurekaLabsAI/micrograd) repository. The objective is to visualize the training process, and show how the model learns through backpropagation."
     )
 
-    inp_col1, inp_col2 = st.columns(2)
+    inp_col1, inp_col2, inp_col3 = st.columns(3)
     with inp_col1:
         GEN_DATA_TYPE = st.selectbox(
             "Data type",
@@ -304,14 +401,26 @@ def main():
     with inp_col2:
         MODEL_CONFIG = st.text_input(
             "Model layers",
-            "[16]",
-            help="List of hidden layer sizes. Default is [16]. The output layer of 3 neurons is added automatically to the end.",
+            "[3]",
+            help="List of hidden layer sizes. Default is [3]. The output layer of 3 neurons is added automatically to the end.",
             on_change=lambda: [
                 st.session_state.pop(k) for k in list(st.session_state.keys())
             ],
         )
 
-    init_session_state(MODEL_CONFIG, GEN_DATA_TYPE)
+    with inp_col3:
+        SEED = st.number_input(
+            "Random seed",
+            min_value=None,
+            max_value=None,
+            value=42,
+            help="Random seed for data generation.",
+            on_change=lambda: [
+                st.session_state.pop(k) for k in list(st.session_state.keys())
+            ],
+        )
+
+    init_session_state(MODEL_CONFIG, GEN_DATA_TYPE, SEED)
 
     inp_col1, inp_col2 = st.columns(2)
     with inp_col1:
@@ -352,68 +461,90 @@ def main():
                 del st.session_state[key]
             init_session_state(MODEL_CONFIG, GEN_DATA_TYPE)
 
-    decision_boundary_col, activation_col, loss_curve_col = st.columns(3)
-
-    with decision_boundary_col:
-        st.markdown("## Decision Boundary")
-        st.session_state.decision_boundary = get_decision_boundary(
-            st.session_state.model
+    with st.container(border=True):
+        st.markdown("## Computational Graph")
+        st.write(
+            "The computational graph below shows the forward and backward pass of the model. The nodes represent the values and the edges represent the operations. The color of the node indicates the gradient of the value."
         )
 
-        train_data, val_data, test_data = st.tabs(["Train", "Validation", "Test"])
+        with st.expander("Show Graph", expanded=True):
+            if st.session_state.train_last_loss:
+                st.subheader(f"Step: {st.session_state.step}")
+                net = draw_dot(st.session_state.train_last_loss)
+                net.write_html("graph.html")
+                html(net.html, height=800, scrolling=True)
+            else:
+                st.write("No graph to display yet. Please train the model.")
 
-        with train_data:
-            fig = plot_decision_boundary(
-                st.session_state.data["train"],
-                st.session_state.decision_boundary,
-                title=f"Training Data | Step: {st.session_state.step}",
-            )
-            st.plotly_chart(fig, use_container_width=True)
+    with st.container(border=True):
+        st.markdown("## Model Visualization")
+        decision_boundary_col, activation_col, loss_curve_col = st.columns(3)
 
-        with val_data:
-            fig = plot_decision_boundary(
-                st.session_state.data["val"],
-                st.session_state.decision_boundary,
-                title=f"Validation Data | Step: {st.session_state.step}",
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with test_data:
-            fig = plot_decision_boundary(
-                st.session_state.data["test"],
-                st.session_state.decision_boundary,
-                title=f"Test Data | Step: {st.session_state.step}",
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-    with activation_col:
-        st.markdown("## Neuron Activations")
-        layer_tabs = st.tabs(
-            [f"Layer {i}" for i in range(len(st.session_state.model.layers))]
-        )
-        for i, layer_tab in enumerate(layer_tabs):
-            with layer_tab:
-                if i == len(st.session_state.model.layers) - 1:
-                    st.write("Output layer activations are not visualized.")
-                    continue
-
-                # st.write(f"Layer: {i}")
-                fig = plot_activation_layer(
-                    st.session_state.model, st.session_state.step, i
+        with decision_boundary_col:
+            st.markdown("### Decision Boundary")
+            with st.expander("Show Decision Boundary", expanded=True):
+                st.session_state.decision_boundary = get_decision_boundary(
+                    st.session_state.model
                 )
-                st.plotly_chart(fig, use_container_width=True)
 
-    with loss_curve_col:
-        st.markdown("## Loss / Accuracy Curves")
-        loss_c, acc_c = st.tabs(["Loss", "Accuracy"])
+                train_data, val_data, test_data = st.tabs(
+                    ["Train", "Validation", "Test"]
+                )
 
-        with loss_c:
-            fig = plot_loss_curves()
-            st.plotly_chart(fig, use_container_width=True)
+                with train_data:
+                    fig = plot_decision_boundary(
+                        st.session_state.data["train"],
+                        st.session_state.decision_boundary,
+                        title=f"Training Data | Step: {st.session_state.step}",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
-        with acc_c:
-            fig = plot_accuracy_curves()
-            st.plotly_chart(fig, use_container_width=True)
+                with val_data:
+                    fig = plot_decision_boundary(
+                        st.session_state.data["val"],
+                        st.session_state.decision_boundary,
+                        title=f"Validation Data | Step: {st.session_state.step}",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                with test_data:
+                    fig = plot_decision_boundary(
+                        st.session_state.data["test"],
+                        st.session_state.decision_boundary,
+                        title=f"Test Data | Step: {st.session_state.step}",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+        with activation_col:
+            st.markdown("### Neuron Activations")
+            with st.expander("Show Neuron Activations", expanded=True):
+                layer_tabs = st.tabs(
+                    [f"Layer {i}" for i in range(len(st.session_state.model.layers))]
+                )
+                for i, layer_tab in enumerate(layer_tabs):
+                    with layer_tab:
+                        if i == len(st.session_state.model.layers) - 1:
+                            st.write("Output layer activations are not visualized.")
+                            continue
+
+                        # st.write(f"Layer: {i}")
+                        fig = plot_activation_layer(
+                            st.session_state.model, st.session_state.step, i
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+
+        with loss_curve_col:
+            st.markdown("### Loss / Accuracy Curves")
+            with st.expander("Show Loss / Accuracy Curves", expanded=True):
+                loss_c, acc_c = st.tabs(["Loss", "Accuracy"])
+
+                with loss_c:
+                    fig = plot_loss_curves()
+                    st.plotly_chart(fig, use_container_width=True)
+
+                with acc_c:
+                    fig = plot_accuracy_curves()
+                    st.plotly_chart(fig, use_container_width=True)
 
 
 if __name__ == "__main__":
