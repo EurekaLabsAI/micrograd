@@ -90,6 +90,7 @@ def cross_entropy(logits, target):
     nll = -logp
     return nll
 
+
 def forward_pass(model, data):
     loss = Value(0)
     last_loss = loss
@@ -305,6 +306,7 @@ def plot_accuracy_curves():
     )
     return fig
 
+
 # Visualization of the computational graph
 def trace(root):
     nodes, edges, levels = set(), set(), {}
@@ -426,14 +428,17 @@ def main():
 
     inp_col1, inp_col2 = st.columns(2)
     with inp_col1:
+        st.write("Click the buttons below to train the model for one or ten steps.")
+
         st.write(
-            """Click the buttons below to train the model for one or ten steps. After each step (or batch of steps), the decision boundary, neuron activations, and loss curves will be updated. 
-        The model configuration and layer information are displayed on the right."""
+            "After each step (or batch of steps), the computational graph, decision boundary, neuron activations, and loss curves will be updated."
         )
 
     with inp_col2:
         st.write("#### Model Configuration")
-        layer_neuron_info = ", ".join(
+        layer_neuron_info = """
+
+""".join(
             [
                 f"Layer `{i}`: `{len(layer.neurons)} neurons`"
                 for i, layer in enumerate(st.session_state.model.layers)
@@ -466,11 +471,21 @@ def main():
     # Backward pass :: Computational graph view
     with st.container(border=True):
         st.markdown("## Computational Graph")
-        st.write(
-            "The computational graph below shows the forward and backward pass of the model. The nodes represent the values and the edges represent the operations. The color of the node indicates the gradient of the value."
+        st.markdown(
+            """The computational graph below shows the model structure.
+        The nodes are colored according to their type:"""
+        )
+        st.markdown(
+            """
+        - `Red`: Input nodes
+        - `Green`: Weight nodes
+        - `Yellow`: Bias nodes
+        - `Gray`: Constant nodes
+        - `Blue`: Operation nodes
+            """
         )
 
-        with st.expander("Show Graph", expanded=True):
+        with st.expander("Show Graph"):
             if st.session_state.train_last_loss:
                 st.subheader(f"Step: {st.session_state.step}")
                 net = draw_dot(st.session_state.train_last_loss)
