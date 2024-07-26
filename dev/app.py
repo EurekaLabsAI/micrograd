@@ -466,7 +466,7 @@ def main():
         if st.button("Reset"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
-            init_session_state(MODEL_CONFIG, GEN_DATA_TYPE)
+            init_session_state(MODEL_CONFIG, GEN_DATA_TYPE, SEED)
 
     # Backward pass :: Computational graph view
     with st.container(border=True):
