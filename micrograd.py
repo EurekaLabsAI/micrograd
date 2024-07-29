@@ -186,6 +186,8 @@ class MLP(Module):
     def __call__(self, x):
         for layer in self.layers:
             x = layer(x)
+            if not isinstance(x, list):
+                x = [x]
         return x
 
     def parameters(self):
