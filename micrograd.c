@@ -149,7 +149,7 @@ void build_topo(Value *v, Value **topo, int *topo_size, Value **visited, int *vi
 void value_backward(Value *v)
 {
     // Topological sort
-    int max_nodes = 10000; // Adjust size as needed
+    int max_nodes = 100000; // Adjust size as needed
     Value **topo = malloc(max_nodes * sizeof(Value *));
     int topo_size = 0;
     Value **visited = malloc(max_nodes * sizeof(Value *));
