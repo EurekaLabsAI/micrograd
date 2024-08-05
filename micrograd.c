@@ -71,7 +71,7 @@ void true_div_backward(Value *out) {
 
 void tanh_backward(Value *out) {
     Value *first= out->children[0];
-    first->grad += exp(first->data) * out->grad;
+    first->grad += (1 - pow(out->data, 2)) * out->grad;
 }
 
 void exp_backward(Value *out) {
@@ -135,12 +135,7 @@ Value* exp_value(Value *first_val) {
 }
 
 Value* true_div(Value *first_value, Value *second_value) {
-    Value **children = calloc(2, sizeof(Value));
-    children[0] = first_value;
-    children[1] = second_value;
-    Value *out = new_value(first_value->data / second_value->data, children, "/");
-    out->_backward = true_div_backward;
-    return out;
+    return multiply(first_value, power(second_value, new_value(-1.0, NULL, " ")));
 }
 
 Value* tanh_act(Value *first_val) {
@@ -232,12 +227,10 @@ void insert_value_list(ValueList *list, Value *node) {
 
 void print_value_list(ValueList *list) {
     ValueListNode *head = list->head;
-    printf("[");
     while(head != NULL) {
-        printf("{%f %s %f}", head->element->data, head->element->_op, head->element->grad);
+        print_value(head->element);
         head = head->next;
     }
-    puts("]");
 }
 
 ValueList* new_list() {
@@ -543,12 +536,11 @@ int main() {
         loss = true_div(loss, new_value(dataset->tr_size,NULL, " "));
         // Performing backward on loss
         backward(loss);
-
         ValueList *model_params = model_parameters(mlp);
         
         // Update the params with gradient computed
         update_params_with_grad_adamw(model_params, learning_rate, beta1, beta2, weight_decay, step);
-        
+
         //update_params_with_grad(model_params, learning_rate);
         //Make the grad of parameters as zero before next iteration
         zero_grad(model_params);
