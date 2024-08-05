@@ -333,6 +333,7 @@ void test_sanity_check(void)
     value_free(q);
     value_free(h);
     value_free(y);
+    // TODO: find a nice way to free the intermediate values
 
     printf("test_sanity_check passed\n");
 }
@@ -368,7 +369,8 @@ void test_more_ops(void)
     value_free(e);
     value_free(f);
     value_free(g);
-
+    // TODO: find a nice way to free the intermediate values
+    
     printf("test_more_ops passed\n");
 }
 
