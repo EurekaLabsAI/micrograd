@@ -1,9 +1,108 @@
+/*
+Compile and run:
+gcc -O3 -Wall -Wextra -Wpedantic -fsanitize=address -fsanitize=undefined -o micrograd micrograd.c && ./micrograd
+*/
+
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
 #include <string.h>
 #include <stdio.h>
-#include "utils.c"
+#include <stdint.h>
+#include <stdbool.h>
+
+// ----------------------------------------------------------------------------
+// random number generation
+
+// RNG structure to mimic Python's random interface
+typedef struct
+{
+    uint64_t state;
+} RNG;
+
+// Initialize RNG with a seed
+void rng_init(RNG *rng, uint64_t seed)
+{
+    rng->state = seed;
+}
+
+// Generate a random 32-bit unsigned integer
+uint32_t rng_random_u32(RNG *rng)
+{
+    rng->state ^= (rng->state >> 12);
+    rng->state ^= (rng->state << 25);
+    rng->state ^= (rng->state >> 27);
+    return (uint32_t)((rng->state * 0x2545F4914F6CDD1DULL) >> 32);
+}
+
+// Generate a random float in [0, 1)
+float rng_random(RNG *rng)
+{
+    return (rng_random_u32(rng) >> 8) / 16777216.0f;
+}
+
+// Generate a random float in [a, b)
+float rng_uniform(RNG *rng, float a, float b)
+{
+    return a + (b - a) * rng_random(rng);
+}
+
+// ----------------------------------------------------------------------------
+// random dataset generation
+
+// Structure to hold a data point
+typedef struct
+{
+    float x;
+    float y;
+    int label;
+} DataPoint;
+
+// Generate random dataset
+void gen_data(RNG *random, int n, DataPoint **train, int *train_size,
+              DataPoint **val, int *val_size, DataPoint **test, int *test_size)
+{
+    DataPoint *pts = malloc(n * sizeof(DataPoint));
+
+    for (int i = 0; i < n; i++)
+    {
+        float x = rng_uniform(random, -2.0f, 2.0f);
+        float y = rng_uniform(random, -2.0f, 2.0f);
+
+        // Very simple dataset
+        int label = (x < 0) ? 0 : (y < 0) ? 1
+                                          : 2;
+
+        pts[i] = (DataPoint){x, y, label};
+    }
+
+    // Create train/val/test splits (80%, 10%, 10%)
+    *train_size = (int)(0.8f * n);
+    *val_size = (int)(0.1f * n);
+    *test_size = n - *train_size - *val_size;
+
+    *train = malloc(*train_size * sizeof(DataPoint));
+    *val = malloc(*val_size * sizeof(DataPoint));
+    *test = malloc(*test_size * sizeof(DataPoint));
+
+    for (int i = 0; i < *train_size; i++)
+    {
+        (*train)[i] = pts[i];
+    }
+    for (int i = 0; i < *val_size; i++)
+    {
+        (*val)[i] = pts[*train_size + i];
+    }
+    for (int i = 0; i < *test_size; i++)
+    {
+        (*test)[i] = pts[*train_size + *val_size + i];
+    }
+
+    free(pts);
+}
+
+// ----------------------------------------------------------------------------
+// micrograd engine
 
 // Value struct implementation
 typedef struct Value
@@ -14,6 +113,7 @@ typedef struct Value
     int _prev_count;
     void (*_backward)(struct Value *);
     char *_op;
+    int refcount;
 } Value;
 
 Value *value_new(double data, Value **children, int n_children, const char *op)
@@ -29,14 +129,30 @@ Value *value_new(double data, Value **children, int n_children, const char *op)
     v->_prev_count = n_children;
     v->_backward = NULL;
     v->_op = strdup(op);
+    v->refcount = 1;
+    for (int i = 0; i < n_children; i++)
+    {
+        if (children[i])
+            children[i]->refcount++;
+    }
     return v;
 }
 
 void value_free(Value *v)
 {
-    free(v->_prev);
-    free(v->_op);
-    free(v);
+    if (!v) return;
+    v->refcount--;
+    if (v->refcount == 0)
+    {
+        for (int i = 0; i < v->_prev_count; i++)
+        {
+            if (v->_prev[i])
+                value_free(v->_prev[i]);
+        }
+        free(v->_prev);
+        free(v->_op);
+        free(v);
+    }
 }
 
 void backward_add(Value *v)
@@ -73,9 +189,10 @@ void backward_pow(Value *v)
 
 Value *value_pow(Value *a, double b)
 {
-    Value *b_val = value_new(b, NULL, 0, "");
+    Value *b_val = value_new(b, NULL, 0, "exponent");
     Value *out = value_new(pow(a->data, b), (Value *[]){a, b_val}, 2, "**");
     out->_backward = backward_pow;
+    value_free(b_val);  // we're decrementing the refcount here, there is still a reference in `out`
     return out;
 }
 
@@ -185,6 +302,9 @@ void value_backward(Value *v)
     free(visited);
 }
 
+// ----------------------------------------------------------------------------
+// neural network
+
 // Neuron struct implementation
 typedef struct Neuron
 {
@@ -224,9 +344,23 @@ Value *neuron_call(Neuron *n, Value **x)
     Value *act = n->b;
     for (int i = 0; i < n->nin; i++)
     {
-        act = value_add(act, value_mul(n->w[i], x[i]));
+        Value *mul_result = value_mul(n->w[i], x[i]);
+        Value *new_act = value_add(act, mul_result);
+        value_free(mul_result);
+        value_free(act);
+        act = new_act;
     }
-    return n->nonlin ? value_tanh(act) : act;
+
+    if (n->nonlin)
+    {
+        Value *tanh_result = value_tanh(act);
+        value_free(act);
+        return tanh_result;
+    }
+    else
+    {
+        return act;
+    }
 }
 
 Value **neuron_parameters(Neuron *n)
@@ -400,6 +534,7 @@ double eval_split(MLP *model, DataPoint *split, int split_size)
         Value *x[2] = {value_new(split[i].x, NULL, 0, ""), value_new(split[i].y, NULL, 0, "")};
         Value **logits = mlp_call(model, x);
         loss = value_add(loss, cross_entropy(logits, 3, split[i].label));
+        free(logits);
     }
     double result = loss->data / split_size;
     value_free(loss);
@@ -437,6 +572,7 @@ void train(MLP *model, DataPoint *train_split, int train_size, DataPoint *val_sp
             Value *x[2] = {value_new(train_split[i].x, NULL, 0, ""), value_new(train_split[i].y, NULL, 0, "")};
             Value **logits = mlp_call(model, x);
             loss = value_add(loss, cross_entropy(logits, 3, train_split[i].label));
+            free(logits);
         }
         loss = value_mul(loss, value_new(1.0 / train_size, NULL, 0, ""));
 
@@ -462,9 +598,11 @@ void train(MLP *model, DataPoint *train_split, int train_size, DataPoint *val_sp
     free(params);
 }
 
+// ----------------------------------------------------------------------------
+
 #ifndef TESTING
 // if we are TESTING (see test_micrograd.c), we'll skip the int main below
-int main(int argc, const char * argv[])
+int main(void)
 {
     RNG rng;
     rng_init(&rng, 42);
