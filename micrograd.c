@@ -16,7 +16,7 @@ typedef struct Value
     char *_op;
 } Value;
 
-Value *value_new(double data, Value **children, int n_children, char *op)
+Value *value_new(double data, Value **children, int n_children, const char *op)
 {
     Value *v = malloc(sizeof(Value));
     v->data = data;
@@ -129,19 +129,32 @@ Value *value_log(Value *a)
     return out;
 }
 
-void build_topo(Value *v, Value **topo, int *topo_size, Value **visited, int *visited_size)
+// Helper function to check if a Value* is in an array
+int contains(Value **arr, int size, Value *v)
 {
-    for (int i = 0; i < *visited_size; i++)
+    for (int i = 0; i < size; i++)
     {
-        if (visited[i] == v)
-        {
-            return;
-        }
+        if (arr[i] == v)
+            return 1;
+    }
+    return 0;
+}
+
+void build_topo(Value *v, Value **topo, int *topo_size, Value **visited, int *visited_size, int max_nodes)
+{
+    if (contains(visited, *visited_size, v))
+        return;
+    if (*visited_size >= max_nodes)
+    {
+        fprintf(stderr, "Error: Exceeded maximum number of nodes in topological sort."
+                        " Current max_nodes limit is %d\n",
+                max_nodes);
+        exit(1);
     }
     visited[(*visited_size)++] = v;
     for (int i = 0; i < v->_prev_count; i++)
     {
-        build_topo(v->_prev[i], topo, topo_size, visited, visited_size);
+        build_topo(v->_prev[i], topo, topo_size, visited, visited_size, max_nodes);
     }
     topo[(*topo_size)++] = v;
 }
@@ -149,13 +162,14 @@ void build_topo(Value *v, Value **topo, int *topo_size, Value **visited, int *vi
 void value_backward(Value *v)
 {
     // Topological sort
-    int max_nodes = 100000; // Adjust size as needed
+    // Adjust size as needed, for `mlp_new(&rng, 2, (int[]){16, 3}, 2)` it's 15,942 nodes!
+    int max_nodes = 16000;
     Value **topo = malloc(max_nodes * sizeof(Value *));
     int topo_size = 0;
     Value **visited = malloc(max_nodes * sizeof(Value *));
     int visited_size = 0;
 
-    build_topo(v, topo, &topo_size, visited, &visited_size);
+    build_topo(v, topo, &topo_size, visited, &visited_size, max_nodes);
 
     // Go one variable at a time and apply the chain rule to get its gradient
     v->grad = 1.0;
