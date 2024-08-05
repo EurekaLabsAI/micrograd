@@ -2,7 +2,7 @@
 
 typedef struct RNG
 {
-    int state;
+    unsigned long long int state;
 } RNG;
 
 u_int32_t rng_random_u32(RNG* rng) {

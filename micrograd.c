@@ -466,6 +466,8 @@ double eval_split(MLP *model, DataPoint **split, int size, int max_target_size) 
         Value *current_loss = cross_entropy(logits, 
                                        new_value(split[i]->label, NULL, " "), 
                                        max_target_size);
+        //average the loss
+        current_loss = true_div(current_loss, new_value(size, NULL, " "));
         loss = add(loss, current_loss);
     }
     return loss->data;
@@ -505,13 +507,13 @@ void update_params_with_grad(ValueList *params, double learning_rate) {
 
 // Training and validation
 int main() {
+   // Generate a random dataset with 100 2D datapoints in 3 classes
+   DataSet *dataset = generate(100, &rng);
+
    int target_size = 3, input_size = 2;
    int nouts[] = {16, target_size}; 
    //Init model - 16 neurons, 3 output neurons (logits)
    MLP *mlp = new_mlp(input_size, nouts, 2);
-
-   // Generate a random dataset with 100 2D datapoints in 3 classes
-   DataSet *dataset = generate(100, &rng);
 
     // Hyper-parameters
    double learning_rate = 1e-1;
@@ -526,7 +528,7 @@ int main() {
             dataset->val, 
             dataset->val_size, 
             3);
-            printf("step %d, validation loss %f\n", step, validation_loss);
+            printf("step %d, validation loss %.6f\n", step, validation_loss);
         }
         Value *loss = new_value(0, NULL, "loss");
         for(int i = 0; i < dataset->tr_size; i++) {
@@ -538,8 +540,7 @@ int main() {
             new_value(dataset->tr[i]->label, NULL, " "), target_size));
         }
         // Average the loss
-        loss = multiply(loss, true_div(new_value(1.0, NULL, " "), 
-                                    new_value(dataset->tr_size,NULL, " ")));
+        loss = true_div(loss, new_value(dataset->tr_size,NULL, " "));
         // Performing backward on loss
         backward(loss);
 
@@ -547,6 +548,7 @@ int main() {
         
         // Update the params with gradient computed
         update_params_with_grad_adamw(model_params, learning_rate, beta1, beta2, weight_decay, step);
+        
         //update_params_with_grad(model_params, learning_rate);
         //Make the grad of parameters as zero before next iteration
         zero_grad(model_params);
