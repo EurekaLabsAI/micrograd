@@ -15,10 +15,20 @@
             width: 100%;
             height: 100%;
         }
+        #decision-canvas {
+            margin: 5px;
+            border: 1px solid black;
+        }
     </style>
 </head>
 <body>
-    <div id="container"></div>
+
+    <!-- The canvas div that displays the current decision boundary of the MLP -->
+    <div id="canvas_container">
+        <canvas id="decision-canvas" width="500" height="500">Browser not supported for Canvas.</canvas><br /><br />
+    </div>
+
+    <!-- The micrograd JavaScript lib -->
     <script src="micrograd.js"></script>
 
 <script>
@@ -49,17 +59,84 @@ function train_step() {
     optimizer.zeroGrad();
     return loss.data;
 }
+function render(minX = -2, minY = -2, maxX = 2, maxY = 2) {
+    // first render the datapoints
+    const canvas = document.getElementById('decision-canvas');
+    const ctx = canvas.getContext('2d');
 
-for (let step = 0; step < 100; step++) {
-    // evaluate the validation split every few steps
-    if (step % 10 === 0) {
-        const valLoss = evalSplit(model, valSplit);
-        console.log(`step ${step}, val loss ${valLoss.toFixed(6)}`);
+    // Clear the canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Function to map data points to canvas coordinates
+    function mapToCanvas(x, y) {
+        const canvasX = (x - minX) * (canvas.width / (maxX - minX));
+        const canvasY = (maxY - y) * (canvas.height / (maxY - minY));
+        return [canvasX, canvasY];
     }
-    // train for one iteration
-    const trainLoss = train_step();
-    console.log(`step ${step}, train loss ${trainLoss}`);
+
+    // Render the current decision surface
+    const stepSize = 0.1;
+    const rectWidth = stepSize * canvas.width / (maxX - minX);
+    const rectHeight = stepSize * canvas.height / (maxY - minY);
+    for (let x = minX; x < maxX; x += stepSize) {
+        for (let y = minY; y < maxY; y += stepSize) {
+            const centerX = x + stepSize / 2;
+            const centerY = y + stepSize / 2;
+            const logits = model.forward([new Value(centerX), new Value(centerY)]);
+            const exps = logits.map(logit => Math.exp(logit.data));
+            const sumExps = exps.reduce((a, b) => a + b, 0);
+            const probs = exps.map(exp => exp / sumExps);
+
+            const r = Math.floor(probs[0] * 255);
+            const g = Math.floor(probs[1] * 255);
+            const b = Math.floor(probs[2] * 255);
+
+            const [canvasX, canvasY] = mapToCanvas(x, y);
+            const [canvasX2, canvasY2] = mapToCanvas(x + stepSize, y + stepSize);
+            const width = canvasX2 - canvasX;
+            const height = canvasY - canvasY2;
+            const mutedR = Math.floor(r + (255 - r) * 0.3);
+            const mutedG = Math.floor(g + (255 - g) * 0.3);
+            const mutedB = Math.floor(b + (255 - b) * 0.3);
+            ctx.fillStyle = `rgb(${mutedR},${mutedG},${mutedB})`;
+            ctx.strokeStyle = `rgb(${mutedR},${mutedG},${mutedB})`;
+            ctx.fillRect(canvasX, canvasY2, width, height);
+            ctx.strokeRect(canvasX, canvasY2, width, height);
+        }
+    }
+
+    // Render training data points
+    for (const [x, y] of trainSplit) {
+        const [canvasX, canvasY] = mapToCanvas(x[0], x[1]);
+        ctx.fillStyle = y === 0 ? 'red' : y === 1 ? 'green' : 'blue';
+        ctx.beginPath();
+        ctx.arc(canvasX, canvasY, 5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = 'black';
+        ctx.stroke();
+    }
 }
+
+let step = 0;
+function trainAndRenderStep() {
+    if (step < 100) {
+        // evaluate the validation split every few steps
+        if (step % 10 === 0) {
+            const valLoss = evalSplit(model, valSplit);
+            console.log(`step ${step}, val loss ${valLoss.toFixed(6)}`);
+        }
+        // train for one iteration
+        const trainLoss = train_step();
+        console.log(`step ${step}, train loss ${trainLoss}`);
+
+        // render the current state
+        render();
+
+        step++;
+        setTimeout(trainAndRenderStep, 100);
+    }
+}
+trainAndRenderStep();
 
 </script>
 </body>
