@@ -83,14 +83,13 @@ def eval_split(model, split):
     return loss
 
 # optimize using Adam
-learning_rate = 1e-1
-beta1 = 0.9
-beta2 = 0.95
-weight_decay = 1e-4
-optimizer = torch.optim.AdamW(model.parameters(),
-                              lr=learning_rate,
-                              betas=(beta1, beta2),
-                              weight_decay=weight_decay)
+optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=1e-1,
+    betas=(0.9, 0.95),
+    eps=1e-8,
+    weight_decay=1e-4
+)
 
 # train
 for step in range(100):
@@ -112,6 +111,6 @@ for step in range(100):
     loss.backward()
     # update with AdamW
     optimizer.step()
-    model.zero_grad()
+    optimizer.zero_grad()
 
     print(f"step {step}, train loss {loss.data}")

@@ -227,6 +227,36 @@ def eval_split(model, split):
     return loss.data
 
 # -----------------------------------------------------------------------------
+# Optimizer AdamW, mirroring the style of PyTorch
+
+class AdamW:
+    def __init__(self, parameters, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0):
+        self.parameters = parameters
+        self.lr = lr
+        self.beta1, self.beta2 = betas
+        self.eps = eps
+        self.weight_decay = weight_decay
+        self.t = 0
+        for p in self.parameters:
+            p.m = 0
+            p.v = 0
+
+    def step(self):
+        self.t += 1
+        for p in self.parameters:
+            if p.grad is None:
+                continue
+            p.m = self.beta1 * p.m + (1 - self.beta1) * p.grad
+            p.v = self.beta2 * p.v + (1 - self.beta2) * (p.grad ** 2)
+            m_hat = p.m / (1 - self.beta1 ** self.t)
+            v_hat = p.v / (1 - self.beta2 ** self.t)
+            p.data -= self.lr * (m_hat / (v_hat ** 0.5 + 1e-8) + self.weight_decay * p.data)
+
+    def zero_grad(self):
+        for p in self.parameters:
+            p.grad = 0
+
+# -----------------------------------------------------------------------------
 # let's train!
 
 # generate a random dataset with 100 2-dimensional datapoints in 3 classes
@@ -235,14 +265,14 @@ train_split, val_split, test_split = gen_data(random, n=100)
 # init the model: 2D inputs, 16 neurons, 3 outputs (logits)
 model = MLP(2, [16, 3])
 
-# optimize using Adam
-learning_rate = 1e-1
-beta1 = 0.9
-beta2 = 0.95
-weight_decay = 1e-4
-for p in model.parameters():
-    p.m = 0.0
-    p.v = 0.0
+# optimize using AdamW
+optimizer = AdamW(
+    model.parameters(),
+    lr=1e-1,
+    betas=(0.9, 0.95),
+    eps=1e-8,
+    weight_decay=1e-4
+)
 
 # train
 for step in range(100):
@@ -261,12 +291,7 @@ for step in range(100):
     # backward pass (deposit the gradients)
     loss.backward()
     # update with AdamW
-    for p in model.parameters():
-        p.m = beta1 * p.m + (1 - beta1) * p.grad
-        p.v = beta2 * p.v + (1 - beta2) * p.grad**2
-        m_hat = p.m / (1 - beta1**(step+1))  # bias correction
-        v_hat = p.v / (1 - beta2**(step+1))
-        p.data -= learning_rate * (m_hat / (v_hat**0.5 + 1e-8) + weight_decay * p.data)
-    model.zero_grad() # never forget to clear those gradients! happens to everyone
+    optimizer.step()
+    optimizer.zero_grad()
 
     print(f"step {step}, train loss {loss.data}")
