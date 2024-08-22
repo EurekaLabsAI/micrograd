@@ -306,6 +306,45 @@ function evalSplit(model, split) {
 }
 
 // ----------------------------------------------------------------------------
+// optimizer
+
+class AdamW {
+  constructor(parameters, lr = 1e-3, betas = [0.9, 0.999], eps = 1e-8, weightDecay = 0.0) {
+    this.parameters = parameters;
+    this.lr = lr;
+    this.beta1 = betas[0];
+    this.beta2 = betas[1];
+    this.eps = eps;
+    this.weightDecay = weightDecay;
+    this.t = 0;
+    for (const p of this.parameters) {
+      p.m = 0;
+      p.v = 0;
+    }
+  }
+
+  step() {
+    this.t += 1;
+    for (const p of this.parameters) {
+      if (p.grad === null) {
+        continue;
+      }
+      p.m = this.beta1 * p.m + (1 - this.beta1) * p.grad;
+      p.v = this.beta2 * p.v + (1 - this.beta2) * (p.grad ** 2);
+      const mHat = p.m / (1 - this.beta1 ** this.t);
+      const vHat = p.v / (1 - this.beta2 ** this.t);
+      p.data -= this.lr * (mHat / (Math.sqrt(vHat) + this.eps) + this.weightDecay * p.data);
+    }
+  }
+
+  zeroGrad() {
+    for (const p of this.parameters) {
+      p.grad = 0;
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
 // Create an instance of RNG with seed 42
 const random = new RNG(42);
 // Generate data using the genData function
@@ -318,14 +357,7 @@ const testSplit = dataSplits.test;
 const model = new MLP(2, [16, 3]);
 
 // optimize using Adam
-const learningRate = 1e-1;
-const beta1 = 0.9;
-const beta2 = 0.95;
-const weightDecay = 1e-4;
-for (const p of model.parameters()) {
-  p.m = 0.0;
-  p.v = 0.0;
-}
+const optimizer = new AdamW(model.parameters(), 1e-1, [0.9, 0.95], 1e-8, 1e-4);
 
 // train
 for (let step = 0; step < 100; step++) {
@@ -346,14 +378,8 @@ for (let step = 0; step < 100; step++) {
   // backward pass (deposit the gradients)
   loss.backward();
   // update with AdamW
-  for (const p of model.parameters()) {
-      p.m = beta1 * p.m + (1 - beta1) * p.grad;
-      p.v = beta2 * p.v + (1 - beta2) * p.grad ** 2;
-      const mHat = p.m / (1 - beta1 ** (step + 1));  // bias correction
-      const vHat = p.v / (1 - beta2 ** (step + 1));
-      p.data -= learningRate * (mHat / (Math.sqrt(vHat) + 1e-8) + weightDecay * p.data);
-  }
-  model.zeroGrad(); // never forget to clear those gradients! happens to everyone
+  optimizer.step();
+  optimizer.zeroGrad();
 
   console.log(`step ${step}, train loss ${loss.data}`);
 }
