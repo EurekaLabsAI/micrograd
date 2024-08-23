@@ -1,4 +1,4 @@
-import Graphviz from './component/Graphviz';
+import Graph from './component/Graph';
 import Demo from './component/Demo';
 import Optimizer from './component/Optimizer';
 import React from 'react';
@@ -10,9 +10,8 @@ function App() {
 
       <Grid className="container12"
         templateAreas={`"gv gv"
-                        "gv gv"
-                        "gr op"
-                        "gr op"`}
+                        "de op"
+                        "de op"`}
         gridTemplateRows={'1fr 1fr'}
         gridTemplateColumns={'1fr 1fr'}
         h='calc(100vh)'
@@ -34,12 +33,12 @@ function App() {
           m="1"
           alignItems='center'
         >
-          <Graphviz />
+          <Graph />
         </GridItem>
         <GridItem
           pl='2'
           bg='pink.400'
-          area={'gr'}
+          area={'de'}
           borderRadius='md'
           p='2'
           m="1"
