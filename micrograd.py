@@ -262,8 +262,8 @@ class AdamW:
 # generate a dataset with 100 2-dimensional datapoints in 3 classes
 train_split, val_split, test_split = gen_data_yinyang(random, n=100)
 
-# init the model: 2D inputs, 16 neurons, 3 outputs (logits)
-model = MLP(2, [16, 3])
+# init the model: 2D inputs, 8 neurons, 3 outputs (logits)
+model = MLP(2, [8, 3])
 
 # optimize using AdamW
 optimizer = AdamW(
