@@ -141,11 +141,11 @@ function trainAndRenderStep() {
         // evaluate the validation split every few steps
         if (step % 10 === 0) {
             const valLoss = evalSplit(model, valSplit);
-            console.log(`step ${step}, val loss ${valLoss.toFixed(6)}`);
+            console.log(`step ${step+1}, val loss ${valLoss.toFixed(6)}`);
         }
         // train for one iteration
         const trainLoss = train_step();
-        console.log(`step ${step}, train loss ${trainLoss}`);
+        console.log(`step ${step+1}, train loss ${trainLoss}`);
 
         // render the current state
         render();

@@ -167,7 +167,7 @@ class Value {
       const out = new Value(Math.exp(this.data), [this], 'exp');
 
       out._backward = () => {
-          this.grad += Math.exp(this.data) * out.grad;
+          this.grad += out.data * out.grad;
       };
 
       return out;
