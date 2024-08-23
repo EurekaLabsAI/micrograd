@@ -11,7 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn.parameter import Parameter
 
-from utils import RNG, gen_data
+from utils import RNG, gen_data_yinyang
 
 random = RNG(42)
 
@@ -64,7 +64,8 @@ class MLP(nn.Module):
 # -----------------------------------------------------------------------------
 # let's train!
 
-train_split, val_split, test_split = gen_data(random, n=100)
+# generate a dataset with 100 2-dimensional datapoints in 3 classes
+train_split, val_split, test_split = gen_data_yinyang(random, n=100)
 
 # init the model: 2D inputs, 16 neurons, 3 outputs (logits)
 model = MLP(2, [16, 3])

@@ -31,7 +31,7 @@ class RNG {
 
 /*
 Generates the Yin Yang dataset.
-Thank you https://github.com/lkriener/yin_yang_data_set/tree/master
+Thank you https://github.com/lkriener/yin_yang_data_set
 */
 function genDataYinYang(random, n = 1000, rSmall = 0.1, rBig = 0.5) {
   const pts = [];
@@ -78,11 +78,9 @@ function genDataYinYang(random, n = 1000, rSmall = 0.1, rBig = 0.5) {
   }
 
   for (let i = 0; i < n; i++) {
-    const goalClass = Math.floor(random.uniform(0, 3));
+    const goalClass = i % 3;
     const [x, y, c] = getSample(goalClass);
-    const xFlipped = -x;  // Flipping in the [-2, 2] range
-    const yFlipped = -y;  // Flipping in the [-2, 2] range
-    pts.push([[x, y, xFlipped, yFlipped], c]);
+    pts.push([[x, y], c]);
   }
 
   // Create train/val/test splits of the data (80%, 10%, 10%)
