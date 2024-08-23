@@ -5,27 +5,28 @@
 Class that mimics the random interface in Python, fully deterministic,
 and in a way that we also control fully, and can also use in C, etc.
 */
+/* global BigInt */
 class RNG {
   constructor(seed) {
-      this.state = BigInt(seed);
+    this.state = BigInt(seed);
   }
 
   random_u32() {
-      // xorshift rng: https://en.wikipedia.org/wiki/Xorshift#xorshift.2A
-      this.state ^= (this.state >> 12n) & 0xFFFFFFFFFFFFFFFFn;
-      this.state ^= (this.state << 25n) & 0xFFFFFFFFFFFFFFFFn;
-      this.state ^= (this.state >> 27n) & 0xFFFFFFFFFFFFFFFFn;
-      return Number((this.state * 0x2545F4914F6CDD1Dn >> 32n) & 0xFFFFFFFFn);
+    // xorshift rng: https://en.wikipedia.org/wiki/Xorshift#xorshift.2A
+    this.state ^= (this.state >> 12n) & 0xFFFFFFFFFFFFFFFFn;
+    this.state ^= (this.state << 25n) & 0xFFFFFFFFFFFFFFFFn;
+    this.state ^= (this.state >> 27n) & 0xFFFFFFFFFFFFFFFFn;
+    return Number((this.state * 0x2545F4914F6CDD1Dn >> 32n) & 0xFFFFFFFFn);
   }
 
   random() {
-      // random float32 in [0, 1)
-      return (this.random_u32() >>> 8) / 16777216.0;
+    // random float32 in [0, 1)
+    return (this.random_u32() >>> 8) / 16777216.0;
   }
 
   uniform(a = 0.0, b = 1.0) {
-      // random float32 in [a, b)
-      return a + (b - a) * this.random();
+    // random float32 in [a, b)
+    return a + (b - a) * this.random();
   }
 }
 
@@ -33,15 +34,15 @@ class RNG {
 Generates the Yin Yang dataset.
 Thank you https://github.com/lkriener/yin_yang_data_set
 */
-function genDataYinYang(random, n = 1000, rSmall = 0.1, rBig = 0.5) {
+export function genDataYinYang(random, n = 1000, rSmall = 0.1, rBig = 0.5) {
   const pts = [];
 
   function distToRightDot(x, y) {
-    return Math.sqrt((x - 1.5 * rBig)**2 + (y - rBig)**2);
+    return Math.sqrt((x - 1.5 * rBig) ** 2 + (y - rBig) ** 2);
   }
 
   function distToLeftDot(x, y) {
-    return Math.sqrt((x - 0.5 * rBig)**2 + (y - rBig)**2);
+    return Math.sqrt((x - 0.5 * rBig) ** 2 + (y - rBig) ** 2);
   }
 
   function whichClass(x, y) {
@@ -63,7 +64,7 @@ function genDataYinYang(random, n = 1000, rSmall = 0.1, rBig = 0.5) {
       const x = random.uniform(0, 2 * rBig);
       const y = random.uniform(0, 2 * rBig);
 
-      if (Math.sqrt((x - rBig)**2 + (y - rBig)**2) > rBig) {
+      if (Math.sqrt((x - rBig) ** 2 + (y - rBig) ** 2) > rBig) {
         continue;
       }
 
@@ -98,134 +99,134 @@ The Value object stores a single scalar number and its gradient.
 */
 class Value {
   constructor(data, _children = [], _op = '') {
-      this.data = data;
-      this.grad = 0;
-      // internal variables used for autograd graph construction
-      this._backward = () => {};
-      this._prev = new Set(_children);
-      this._op = _op; // the op that produced this node, for graphviz / debugging / etc
+    this.data = data;
+    this.grad = 0;
+    // internal variables used for autograd graph construction
+    this._backward = () => { };
+    this._prev = new Set(_children);
+    this._op = _op; // the op that produced this node, for graphviz / debugging / etc
   }
 
   add(other) {
-      other = other instanceof Value ? other : new Value(other);
-      const out = new Value(this.data + other.data, [this, other], '+');
+    other = other instanceof Value ? other : new Value(other);
+    const out = new Value(this.data + other.data, [this, other], '+');
 
-      out._backward = () => {
-          this.grad += out.grad;
-          other.grad += out.grad;
-      };
+    out._backward = () => {
+      this.grad += out.grad;
+      other.grad += out.grad;
+    };
 
-      return out;
+    return out;
   }
 
   mul(other) {
-      other = other instanceof Value ? other : new Value(other);
-      const out = new Value(this.data * other.data, [this, other], '*');
+    other = other instanceof Value ? other : new Value(other);
+    const out = new Value(this.data * other.data, [this, other], '*');
 
-      out._backward = () => {
-          this.grad += other.data * out.grad;
-          other.grad += this.data * out.grad;
-      };
+    out._backward = () => {
+      this.grad += other.data * out.grad;
+      other.grad += this.data * out.grad;
+    };
 
-      return out;
+    return out;
   }
 
   pow(other) {
-      if (typeof other !== 'number') {
-          throw new Error("only supporting number powers for now");
-      }
-      const out = new Value(Math.pow(this.data, other), [this], `**${other}`);
+    if (typeof other !== 'number') {
+      throw new Error("only supporting number powers for now");
+    }
+    const out = new Value(Math.pow(this.data, other), [this], `**${other}`);
 
-      out._backward = () => {
-          this.grad += (other * Math.pow(this.data, other - 1)) * out.grad;
-      };
+    out._backward = () => {
+      this.grad += (other * Math.pow(this.data, other - 1)) * out.grad;
+    };
 
-      return out;
+    return out;
   }
 
   relu() {
-      const out = new Value(this.data < 0 ? 0 : this.data, [this], 'ReLU');
+    const out = new Value(this.data < 0 ? 0 : this.data, [this], 'ReLU');
 
-      out._backward = () => {
-          this.grad += (out.data > 0 ? 1 : 0) * out.grad;
-      };
+    out._backward = () => {
+      this.grad += (out.data > 0 ? 1 : 0) * out.grad;
+    };
 
-      return out;
+    return out;
   }
 
   tanh() {
-      const out = new Value(Math.tanh(this.data), [this], 'tanh');
+    const out = new Value(Math.tanh(this.data), [this], 'tanh');
 
-      out._backward = () => {
-          this.grad += (1 - out.data ** 2) * out.grad;
-      };
+    out._backward = () => {
+      this.grad += (1 - out.data ** 2) * out.grad;
+    };
 
-      return out;
+    return out;
   }
 
   exp() {
-      const out = new Value(Math.exp(this.data), [this], 'exp');
+    const out = new Value(Math.exp(this.data), [this], 'exp');
 
-      out._backward = () => {
-          this.grad += Math.exp(this.data) * out.grad;
-      };
+    out._backward = () => {
+      this.grad += Math.exp(this.data) * out.grad;
+    };
 
-      return out;
+    return out;
   }
 
   log() {
-      const out = new Value(Math.log(this.data), [this], 'log');
+    const out = new Value(Math.log(this.data), [this], 'log');
 
-      out._backward = () => {
-          this.grad += (1 / this.data) * out.grad;
-      };
+    out._backward = () => {
+      this.grad += (1 / this.data) * out.grad;
+    };
 
-      return out;
+    return out;
   }
 
   neg() {
-      return this.mul(-1);
+    return this.mul(-1);
   }
 
   sub(other) {
-      return this.add(other.neg());
+    return this.add(other.neg());
   }
 
   div(other) {
-      return this.mul(other.pow(-1));
+    return this.mul(other.pow(-1));
   }
 
   backward() {
-      // topological order all of the children in the graph
-      const topo = [];
-      const visited = new Set();
+    // topological order all of the children in the graph
+    const topo = [];
+    const visited = new Set();
 
-      const buildTopo = (v) => {
-          if (!visited.has(v)) {
-              visited.add(v);
-              for (const child of v._prev) {
-                  buildTopo(child);
-              }
-              topo.push(v);
-          }
-      };
-
-      buildTopo(this);
-
-      // go one variable at a time and apply the chain rule to get its gradient
-      this.grad = 1;
-      for (const v of topo.reverse()) {
-          v._backward();
+    const buildTopo = (v) => {
+      if (!visited.has(v)) {
+        visited.add(v);
+        for (const child of v._prev) {
+          buildTopo(child);
+        }
+        topo.push(v);
       }
+    };
+
+    buildTopo(this);
+
+    // go one variable at a time and apply the chain rule to get its gradient
+    this.grad = 1;
+    for (const v of topo.reverse()) {
+      v._backward();
+    }
   }
 
   toString() {
-      return `Value(data=${this.data}, grad=${this.grad})`;
+    return `Value(data=${this.data}, grad=${this.grad})`;
   }
 
   // Alias for toString to mimic Python's __repr__
   [Symbol.for('nodejs.util.inspect.custom')]() {
-      return this.toString();
+    return this.toString();
   }
 }
 
@@ -234,85 +235,93 @@ class Value {
 
 class Module {
   zeroGrad() {
-      for (const p of this.parameters()) {
-          p.grad = 0;
-      }
+    for (const p of this.parameters()) {
+      p.grad = 0;
+    }
   }
 
   parameters() {
-      return [];
+    return [];
   }
 }
-
+function uniform(a = 0.0, b = 1.0) {
+  // random float32 in [a, b)
+  return a + (b - a) * Math.random();
+}
 class Neuron extends Module {
+
   constructor(nin, nonlin = true) {
-      super();
-      const scale = Math.pow(nin, -0.5);
-      this.w = Array(nin).fill().map(() => new Value(random.uniform(-1, 1) * scale));
-      this.b = new Value(0);
-      this.nonlin = nonlin;
+    super();
+
+    const scale = Math.pow(nin, -0.5);
+
+
+
+    this.w = Array(nin).fill().map(() => new Value(uniform(-1, 1) * scale));
+    this.b = new Value(0);
+    this.nonlin = nonlin;
   }
 
   forward(x) {
-      const act = x.reduce((sum, xi, i) => sum.add(this.w[i].mul(xi)), this.b);
-      return this.nonlin ? act.tanh() : act;
+    const act = x.reduce((sum, xi, i) => sum.add(this.w[i].mul(xi)), this.b);
+    return this.nonlin ? act.tanh() : act;
   }
 
   parameters() {
-      return [...this.w, this.b];
+    return [...this.w, this.b];
   }
 
   toString() {
-      return `${this.nonlin ? 'TanH' : 'Linear'}Neuron(${this.w.length})`;
+    return `${this.nonlin ? 'TanH' : 'Linear'}Neuron(${this.w.length})`;
   }
 }
 
 class Layer extends Module {
   constructor(nin, nout, kwargs = {}) {
-      super();
-      this.neurons = Array(nout).fill().map(() => new Neuron(nin, kwargs.nonlin));
+    super();
+    this.neurons = Array(nout).fill().map(() => new Neuron(nin, kwargs.nonlin));
   }
 
   forward(x) {
-      const out = this.neurons.map(n => n.forward(x));
-      return out.length === 1 ? out[0] : out;
+    const out = this.neurons.map(n => n.forward(x));
+    return out.length === 1 ? out[0] : out;
   }
 
   parameters() {
-      return this.neurons.flatMap(n => n.parameters());
+    return this.neurons.flatMap(n => n.parameters());
   }
 
   toString() {
-      return `Layer of [${this.neurons.join(', ')}]`;
+    return `Layer of [${this.neurons.join(', ')}]`;
   }
 }
 
 class MLP extends Module {
   constructor(nin, nouts) {
-      super();
-      const sz = [nin, ...nouts];
-      this.layers = sz.slice(0, -1).map((_, i) =>
-          new Layer(sz[i], sz[i+1], { nonlin: i !== nouts.length - 1 })
-      );
+    super();
+    const sz = [nin, ...nouts];
+    this.layers = sz.slice(0, -1).map((_, i) =>
+      new Layer(sz[i], sz[i + 1], { nonlin: i !== nouts.length - 1 })
+    );
   }
 
   forward(x) {
-      return this.layers.reduce((acc, layer) => layer.forward(acc), x);
+    return this.layers.reduce((acc, layer) => layer.forward(acc), x);
   }
 
   parameters() {
-      return this.layers.flatMap(layer => layer.parameters());
+    return this.layers.flatMap(layer => layer.parameters());
   }
 
   toString() {
-      return `MLP of [${this.layers.join(', ')}]`;
+    return `MLP of [${this.layers.join(', ')}]`;
   }
 }
 
 // ----------------------------------------------------------------------------
 // loss function
 
-function crossEntropy(logits, target) {
+export function crossEntropy(logits, target) {
   // subtract the max for numerical stability (avoids overflow)
   const maxVal = Math.max(...logits.map(val => val.data));
   logits = logits.map(val => val.add(-maxVal));
@@ -332,7 +341,7 @@ function crossEntropy(logits, target) {
 // ----------------------------------------------------------------------------
 // evaluation utility
 
-function evalSplit(model, split) {
+export function evalSplit(model, split) {
   // evaluate the loss of a split
   let loss = new Value(0);
   for (const [x, y] of split) {
@@ -380,4 +389,7 @@ class AdamW {
       p.grad = 0;
     }
   }
+}
+export {
+  RNG, MLP, AdamW, Value
 }
