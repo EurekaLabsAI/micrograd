@@ -3,7 +3,7 @@ Defines a simple autograd engine and uses it to classify points in the plane
 to 3 classes (red, green, blue) using a simple multilayer perceptron (MLP).
 """
 import math
-from utils import RNG, gen_data_yinyang
+from utils import RNG, gen_data_yinyang, draw_dot
 random = RNG(42)
 
 # -----------------------------------------------------------------------------
@@ -244,44 +244,6 @@ class AdamW:
             p.grad = 0
 
 # -----------------------------------------------------------------------------
-# (optional) graphviz visualization
-
-def trace(root):
-    nodes, edges = set(), set()
-    def build(v):
-        if v not in nodes:
-            nodes.add(v)
-            for child in v._prev:
-                edges.add((child, v))
-                build(child)
-    build(root)
-    return nodes, edges
-
-def draw_dot(root, format='svg', rankdir='LR', outfile='graph'):
-    """
-    format: png | svg | ...
-    rankdir: TB (top to bottom graph) | LR (left to right)
-    """
-    # brew install graphviz
-    # pip install graphviz
-    from graphviz import Digraph
-    assert rankdir in ['LR', 'TB']
-    nodes, edges = trace(root)
-    dot = Digraph(format=format, graph_attr={'rankdir': rankdir})
-
-    for n in nodes:
-        dot.node(name=str(id(n)), label = "{ data %.4f | grad %.4f }" % (n.data, n.grad), shape='record', style='filled', fillcolor='white')
-        if n._op:
-            dot.node(name=str(id(n)) + n._op, label=n._op)
-            dot.edge(str(id(n)) + n._op, str(id(n)))
-
-    for n1, n2 in edges:
-        dot.edge(str(id(n1)), str(id(n2)) + n2._op)
-
-    print("saving graph to", outfile + "." + format)
-    dot.render(outfile, format=format)
-
-# -----------------------------------------------------------------------------
 # let's train!
 
 # generate a dataset with 100 2-dimensional datapoints in 3 classes
@@ -324,7 +286,7 @@ for step in range(num_steps):
     # print some stats
     print(f"step {step+1}/{num_steps}, train loss {loss.data}")
 
-# (optional) visualization at the end: take origin (0,0) and draw the graph
+# (optional) visualization at the end: take origin (0,0) and draw the computational graph
 x, y = (0.0, 0.0), 0
 logits = model([Value(x[0]), Value(x[1])])
 loss = cross_entropy(logits, y)
