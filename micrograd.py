@@ -314,9 +314,9 @@ for step in range(num_steps):
         val_loss = loss_fun(model, val_split)
         print(f"step {step+1}/{num_steps}, val loss {val_loss.data:.6f}")
 
-    # forward the network (get logits of all training datapoints)
+    # forward the network and the loss and all training datapoints
     loss = loss_fun(model, train_split)
-    # backward pass (deposit the gradients)
+    # backward pass (calculate the gradient of the loss w.r.t. the model parameters)
     loss.backward()
     # update model parameters
     optimizer.step()
