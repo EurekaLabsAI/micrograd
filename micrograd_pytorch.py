@@ -71,18 +71,6 @@ train_split, val_split, test_split = gen_data_yinyang(random, n=100)
 model = MLP(2, [8, 3])
 model.to(torch.float64) # ensure we're using double precision
 
-@torch.no_grad()
-def eval_split(model, split):
-    model.eval()
-    # evaluate the loss of a split
-    loss = 0.0
-    for x, y in split:
-        logits = model(torch.tensor(x))
-        y = torch.tensor(y).view(-1)
-        loss += F.cross_entropy(logits, y).item()
-    loss = loss * (1.0/len(split)) # normalize the loss
-    return loss
-
 # optimize using Adam
 optimizer = torch.optim.AdamW(
     model.parameters(),
@@ -92,26 +80,25 @@ optimizer = torch.optim.AdamW(
     weight_decay=1e-4
 )
 
+def loss_fun(model, split):
+    losses = [F.cross_entropy(model(torch.tensor(x)), torch.tensor(y).view(-1)) for x, y in split]
+    return torch.stack(losses).mean()
+
 # train
-for step in range(100):
+num_steps = 100
+for step in range(num_steps):
 
     # evaluate the validation split every few steps
     if step % 10 == 0:
-        val_loss = eval_split(model, val_split)
-        print(f"step {step}, val loss {val_loss}")
+        val_loss = loss_fun(model, val_split)
+        print(f"step {step+1}/{num_steps}, val loss {val_loss.item()}")
 
     # forward the network (get logits of all training datapoints)
-    model.train()
-    losses = []
-    for x, y in train_split:
-        logits = model(torch.tensor(x))
-        loss = F.cross_entropy(logits, torch.tensor(y).view(-1))
-        losses.append(loss)
-    loss = torch.stack(losses).mean()
+    loss = loss_fun(model, train_split)
     # backward pass (deposit the gradients)
     loss.backward()
     # update with AdamW
     optimizer.step()
     optimizer.zero_grad()
 
-    print(f"step {step}, train loss {loss.data}")
+    print(f"step {step+1}/{num_steps}, train loss {loss.data}")

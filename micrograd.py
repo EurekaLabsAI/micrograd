@@ -3,13 +3,11 @@ Defines a simple autograd engine and uses it to classify points in the plane
 to 3 classes (red, green, blue) using a simple multilayer perceptron (MLP).
 """
 import math
-
 from utils import RNG, gen_data_yinyang
-
 random = RNG(42)
 
 # -----------------------------------------------------------------------------
-# Value
+# Value. Similar to PyTorch's Tensor but only of size 1 element
 
 class Value:
     """ stores a single scalar value and its gradient """
@@ -134,7 +132,7 @@ class Value:
         return f"Value(data={self.data}, grad={self.grad})"
 
 # -----------------------------------------------------------------------------
-# Multi-Layer Perceptron (MLP) network
+# Multi-Layer Perceptron (MLP) network. Module here is similar to PyTorch's nn.Module
 
 class Module:
 
@@ -215,19 +213,7 @@ def cross_entropy(logits, target):
     return nll
 
 # -----------------------------------------------------------------------------
-# evaluation utility to compute the loss on a given split of the dataset
-
-def eval_split(model, split):
-    # evaluate the loss of a split
-    loss = Value(0)
-    for x, y in split:
-        logits = model([Value(x[0]), Value(x[1])])
-        loss += cross_entropy(logits, y)
-    loss = loss * (1.0/len(split)) # normalize the loss
-    return loss.data
-
-# -----------------------------------------------------------------------------
-# Optimizer AdamW, mirroring the style of PyTorch
+# The AdamW optimizer, same as PyTorch optim.AdamW
 
 class AdamW:
     def __init__(self, parameters, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0):
@@ -236,10 +222,11 @@ class AdamW:
         self.beta1, self.beta2 = betas
         self.eps = eps
         self.weight_decay = weight_decay
-        self.t = 0
+        # state of the optimizer
+        self.t = 0 # step counter
         for p in self.parameters:
-            p.m = 0
-            p.v = 0
+            p.m = 0 # first moment
+            p.v = 0 # second moment
 
     def step(self):
         self.t += 1
@@ -312,29 +299,32 @@ optimizer = AdamW(
     weight_decay=1e-4
 )
 
-# train
-for step in range(100):
+def loss_fun(model, split):
+    # evaluate the loss function on a given data split
+    losses = [cross_entropy(model(x), y) for x, y in split]
+    mean_loss = sum(losses) / len(losses)
+    return mean_loss
+
+# train the network
+num_steps = 100
+for step in range(num_steps):
 
     # evaluate the validation split every few steps
     if step % 10 == 0:
-        val_loss = eval_split(model, val_split)
-        print(f"step {step}, val loss {val_loss:.6f}")
+        val_loss = loss_fun(model, val_split)
+        print(f"step {step+1}/{num_steps}, val loss {val_loss.data:.6f}")
 
     # forward the network (get logits of all training datapoints)
-    loss = Value(0)
-    for x, y in train_split:
-        logits = model([Value(x[0]), Value(x[1])])
-        loss += cross_entropy(logits, y)
-    loss = loss * (1.0/len(train_split)) # normalize the loss
+    loss = loss_fun(model, train_split)
     # backward pass (deposit the gradients)
     loss.backward()
-    # update with AdamW
+    # update model parameters
     optimizer.step()
     optimizer.zero_grad()
+    # print some stats
+    print(f"step {step+1}/{num_steps}, train loss {loss.data}")
 
-    print(f"step {step}, train loss {loss.data}")
-
-# (optional) visualization: take origin 0,0 and draw the graph
+# (optional) visualization at the end: take origin (0,0) and draw the graph
 x, y = (0.0, 0.0), 0
 logits = model([Value(x[0]), Value(x[1])])
 loss = cross_entropy(logits, y)
