@@ -30,21 +30,61 @@ class RNG {
 }
 
 /*
-Simple dataset generation function that generates a dataset of n points
-in 2D space, with labels 0, 1, 2. The dataset is split into training,
-validation, and test sets (80%, 10%, 10%).
+Generates the Yin Yang dataset.
+Thank you https://github.com/lkriener/yin_yang_data_set/tree/master
 */
-function genData(random, n = 100) {
+function genDataYinYang(random, n = 1000, rSmall = 0.1, rBig = 0.5) {
   const pts = [];
-  for (let i = 0; i < n; i++) {
-      const x = random.uniform(-2.0, 2.0);
-      const y = random.uniform(-2.0, 2.0);
-      // Very simple dataset
-      const label = x < 0 ? 0 : y < 0 ? 1 : 2;
-      // Uncomment the following line and comment out the above line to use concentric circles instead
-      // const label = x**2 + y**2 < 1 ? 0 : x**2 + y**2 < 2 ? 1 : 2;
-      pts.push([[x, y], label]);
+
+  function distToRightDot(x, y) {
+    return Math.sqrt((x - 1.5 * rBig)**2 + (y - rBig)**2);
   }
+
+  function distToLeftDot(x, y) {
+    return Math.sqrt((x - 0.5 * rBig)**2 + (y - rBig)**2);
+  }
+
+  function whichClass(x, y) {
+    const dRight = distToRightDot(x, y);
+    const dLeft = distToLeftDot(x, y);
+    const criterion1 = dRight <= rSmall;
+    const criterion2 = dLeft > rSmall && dLeft <= 0.5 * rBig;
+    const criterion3 = y > rBig && dRight > 0.5 * rBig;
+    const isYin = criterion1 || criterion2 || criterion3;
+    const isCircles = dRight < rSmall || dLeft < rSmall;
+
+    if (isCircles) return 2;
+    return isYin ? 0 : 1;
+  }
+
+  function getSample(goalClass = null) {
+    while (true) {
+      // Generate x and y in the range [0, 2*rBig]
+      const x = random.uniform(0, 2 * rBig);
+      const y = random.uniform(0, 2 * rBig);
+
+      if (Math.sqrt((x - rBig)**2 + (y - rBig)**2) > rBig) {
+        continue;
+      }
+
+      const c = whichClass(x, y);
+      if (goalClass === null || c === goalClass) {
+        // Scale and shift x and y to span [-2, 2]
+        const scaledX = (x / rBig - 1) * 2;
+        const scaledY = (y / rBig - 1) * 2;
+        return [scaledX, scaledY, c];
+      }
+    }
+  }
+
+  for (let i = 0; i < n; i++) {
+    const goalClass = Math.floor(random.uniform(0, 3));
+    const [x, y, c] = getSample(goalClass);
+    const xFlipped = -x;  // Flipping in the [-2, 2] range
+    const yFlipped = -y;  // Flipping in the [-2, 2] range
+    pts.push([[x, y, xFlipped, yFlipped], c]);
+  }
+
   // Create train/val/test splits of the data (80%, 10%, 10%)
   const tr = pts.slice(0, Math.floor(0.8 * n));
   const val = pts.slice(Math.floor(0.8 * n), Math.floor(0.9 * n));

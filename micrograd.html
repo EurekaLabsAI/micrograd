@@ -35,7 +35,7 @@
 // Create an instance of RNG with seed 42
 const random = new RNG(42);
 // Generate data using the genData function
-const dataSplits = genData(random, 100);
+const dataSplits = genDataYinYang(random, 100);
 const trainSplit = dataSplits.train;
 const valSplit = dataSplits.validation;
 const testSplit = dataSplits.test;
@@ -95,9 +95,9 @@ function render(minX = -2, minY = -2, maxX = 2, maxY = 2) {
             const [canvasX2, canvasY2] = mapToCanvas(x + stepSize, y + stepSize);
             const width = canvasX2 - canvasX;
             const height = canvasY - canvasY2;
-            const mutedR = Math.floor(r + (255 - r) * 0.3);
-            const mutedG = Math.floor(g + (255 - g) * 0.3);
-            const mutedB = Math.floor(b + (255 - b) * 0.3);
+            const mutedR = Math.floor(r + (255 - r) * 0.5);
+            const mutedG = Math.floor(g + (255 - g) * 0.5);
+            const mutedB = Math.floor(b + (255 - b) * 0.5);
             ctx.fillStyle = `rgb(${mutedR},${mutedG},${mutedB})`;
             ctx.strokeStyle = `rgb(${mutedR},${mutedG},${mutedB})`;
             ctx.fillRect(canvasX, canvasY2, width, height);
