@@ -13,7 +13,7 @@ function App() {
                         "de op"
                         "de op"`}
         gridTemplateRows={'1fr 1fr'}
-        gridTemplateColumns={'1fr 1fr'}
+        gridTemplateColumns={'1fr 2fr'}
         h='calc(100vh)'
         gap='1'
         color='blackAlpha.700'
