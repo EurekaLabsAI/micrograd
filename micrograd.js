@@ -19,12 +19,12 @@ class RNG {
   }
 
   random() {
-      // random float32 in [0, 1)
+      // random number in [0, 1)
       return (this.random_u32() >>> 8) / 16777216.0;
   }
 
   uniform(a = 0.0, b = 1.0) {
-      // random float32 in [a, b)
+      // random number in [a, b)
       return a + (b - a) * this.random();
   }
 }
