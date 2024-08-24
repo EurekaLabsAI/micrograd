@@ -330,20 +330,6 @@ function crossEntropy(logits, target) {
 }
 
 // ----------------------------------------------------------------------------
-// evaluation utility
-
-function evalSplit(model, split) {
-  // evaluate the loss of a split
-  let loss = new Value(0);
-  for (const [x, y] of split) {
-    const logits = model.forward([new Value(x[0]), new Value(x[1])]);
-    loss = loss.add(crossEntropy(logits, y));
-  }
-  loss = loss.mul(1.0 / split.length); // normalize the loss
-  return loss.data;
-}
-
-// ----------------------------------------------------------------------------
 // optimizer
 
 class AdamW {

@@ -8,24 +8,47 @@
         body, html {
             margin: 0;
             padding: 0;
-            height: 100%;
-            overflow: hidden;
         }
-        #container {
-            width: 100%;
-            height: 100%;
+        #canvas-div {
+            margin: 5px;
         }
         #decision-canvas {
-            margin: 5px;
             border: 1px solid black;
+        }
+        .container {
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+        }
+        #optimizer-div {
+            margin: 5px;
+            font-size: 10px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        #optimizer-div table {
+            border-collapse: collapse;
+        }
+        #optimizer-div th, #optimizer-div td {
+            border: 1px solid #ddd;
+            padding: 4px 8px;
+            text-align: right;
+        }
+        #optimizer-div th {
+            background-color: #f2f2f2;
         }
     </style>
 </head>
 <body>
 
-    <!-- The canvas div that displays the current decision boundary of the MLP -->
-    <div id="canvas_container">
-        <canvas id="decision-canvas" width="500" height="500">Browser not supported for Canvas.</canvas><br /><br />
+    <div class="container">
+        <!-- The canvas div that displays the current decision boundary of the MLP -->
+        <div id="canvas-div">
+            <canvas id="decision-canvas" width="500" height="500">Browser not supported for Canvas.</canvas><br /><br />
+        </div>
+        <!-- The div that displays the AdamW optimizer state: param, grad, m, v -->
+        <div id="optimizer-div">
+        </div>
     </div>
 
     <!-- The micrograd JavaScript lib -->
@@ -44,22 +67,18 @@ const model = new MLP(2, [8, 3]);
 // optimize using AdamW
 const optimizer = new AdamW(model.parameters(), 1e-1, [0.9, 0.95], 1e-8, 1e-4);
 
-function train_step() {
+function lossFun(model, split) {
     // forward the network and the loss function on all training datapoints
     let loss = new Value(0);
-    for (const [x, y] of trainSplit) {
+    for (const [x, y] of split) {
         const logits = model.forward([new Value(x[0]), new Value(x[1])]);
         loss = loss.add(crossEntropy(logits, y));
     }
-    loss = loss.mul(1.0 / trainSplit.length); // normalize the loss
-    // backward pass (deposit the gradients)
-    loss.backward();
-    // update with AdamW
-    optimizer.step();
-    optimizer.zeroGrad();
-    return loss.data;
+    loss = loss.mul(1.0 / split.length); // normalize the loss
+    return loss;
 }
-function render(minX = -2, minY = -2, maxX = 2, maxY = 2) {
+
+function renderCanvas(minX = -2, minY = -2, maxX = 2, maxY = 2) {
     // first render the datapoints
     const canvas = document.getElementById('decision-canvas');
     const ctx = canvas.getContext('2d');
@@ -135,20 +154,49 @@ function render(minX = -2, minY = -2, maxX = 2, maxY = 2) {
     }
 }
 
+function renderOptimizerState() {
+    const optimizerDiv = document.getElementById('optimizer-div');
+    optimizerDiv.innerHTML = '<table><tr><th>param</th><th>grad</th><th>m</th><th>sqrt(v)</th><th>-m/sqrt(v)</th></tr>';
+
+    model.parameters().forEach((param, index) => {
+        const sqrtV = Math.sqrt(param.v + 1e-8);
+        const update = -param.m / sqrtV; // the -sign is because we update params with -=
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${param.data.toFixed(4)}</td>
+            <td>${param.grad.toFixed(4)}</td>
+            <td>${param.m.toFixed(4)}</td>
+            <td>${sqrtV.toFixed(4)}</td>
+            <td>${update.toFixed(4)}</td>
+        `;
+        optimizerDiv.querySelector('table').appendChild(row);
+    });
+
+    optimizerDiv.innerHTML += '</table>';
+}
+
 let step = 0;
 function trainAndRenderStep() {
     if (step < 100) {
         // evaluate the validation split every few steps
         if (step % 10 === 0) {
-            const valLoss = evalSplit(model, valSplit);
-            console.log(`step ${step+1}, val loss ${valLoss.toFixed(6)}`);
+            const valLoss = lossFun(model, valSplit);
+            console.log(`step ${step+1}, val loss ${valLoss.data.toFixed(6)}`);
         }
-        // train for one iteration
-        const trainLoss = train_step();
-        console.log(`step ${step+1}, train loss ${trainLoss}`);
+        // get the loss for the training split
+        const trainLoss = lossFun(model, trainSplit);
+        console.log(`step ${step+1}, train loss ${trainLoss.data.toFixed(6)}`);
+
+        // backward pass (deposit the gradients)
+        trainLoss.backward();
 
         // render the current state
-        render();
+        renderCanvas();
+        renderOptimizerState();
+
+        // update with AdamW
+        optimizer.step();
+        optimizer.zeroGrad();
 
         step++;
         setTimeout(trainAndRenderStep, 100);
