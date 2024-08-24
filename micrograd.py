@@ -195,6 +195,7 @@ class MLP(Module):
 # -----------------------------------------------------------------------------
 # loss function: the negative log likelihood (NLL) loss
 # NLL loss = CrossEntropy loss when the targets are one-hot vectors
+# same as PyTorch's F.cross_entropy
 
 def cross_entropy(logits, target):
     # subtract the max for numerical stability (avoids overflow)
@@ -216,7 +217,7 @@ def cross_entropy(logits, target):
 # The AdamW optimizer, same as PyTorch optim.AdamW
 
 class AdamW:
-    def __init__(self, parameters, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0):
+    def __init__(self, parameters, lr=1e-1, betas=(0.9, 0.95), eps=1e-8, weight_decay=0.0):
         self.parameters = parameters
         self.lr = lr
         self.beta1, self.beta2 = betas
@@ -253,13 +254,7 @@ train_split, val_split, test_split = gen_data_yinyang(random, n=100)
 model = MLP(2, [8, 3])
 
 # optimize using AdamW
-optimizer = AdamW(
-    model.parameters(),
-    lr=1e-1,
-    betas=(0.9, 0.95),
-    eps=1e-8,
-    weight_decay=1e-4
-)
+optimizer = AdamW(model.parameters(), lr=1e-1, weight_decay=1e-4)
 
 def loss_fun(model, split):
     # evaluate the loss function on a given data split
@@ -288,7 +283,7 @@ for step in range(num_steps):
 
 # (optional) visualization at the end: take origin (0,0) and draw the computational graph
 x, y = (0.0, 0.0), 0
-logits = model([Value(x[0]), Value(x[1])])
+logits = model(x)
 loss = cross_entropy(logits, y)
 loss.backward()
 try:
