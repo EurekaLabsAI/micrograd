@@ -22,7 +22,7 @@
         }
         #optimizer-div {
             margin: 5px;
-            font-size: 10px;
+            font-size: 14px;
             max-height: 500px;
             overflow-y: auto;
         }
@@ -154,25 +154,40 @@ function renderCanvas(minX = -2, minY = -2, maxX = 2, maxY = 2) {
     }
 }
 
-function renderOptimizerState() {
+function renderOptimizerState(num_columns = 3) {
     const optimizerDiv = document.getElementById('optimizer-div');
-    optimizerDiv.innerHTML = '<table><tr><th>param</th><th>grad</th><th>m</th><th>sqrt(v)</th><th>-m/sqrt(v)</th></tr>';
+    optimizerDiv.innerHTML = '';
 
-    model.parameters().forEach((param, index) => {
-        const sqrtV = Math.sqrt(param.v + 1e-8);
-        const update = -param.m / sqrtV; // the -sign is because we update params with -=
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${param.data.toFixed(4)}</td>
-            <td>${param.grad.toFixed(4)}</td>
-            <td>${param.m.toFixed(4)}</td>
-            <td>${sqrtV.toFixed(4)}</td>
-            <td>${update.toFixed(4)}</td>
-        `;
-        optimizerDiv.querySelector('table').appendChild(row);
-    });
+    const parameters = model.parameters();
+    const rows = Math.ceil(parameters.length / num_columns);
 
-    optimizerDiv.innerHTML += '</table>';
+    for (let col = 0; col < num_columns; col++) {
+        const table = document.createElement('table');
+        table.innerHTML = '<tr><th>param</th><th>-m/sqrt(v)</th><th>grad</th><th>m</th><th>sqrt(v)</th></tr>';
+        table.style.display = 'inline-block';
+        table.style.marginRight = '10px';
+        table.style.verticalAlign = 'top';
+
+        for (let row = 0; row < rows; row++) {
+            const index = col * rows + row;
+            if (index >= parameters.length) break;
+
+            const param = parameters[index];
+            const sqrtV = Math.sqrt(param.v + 1e-8);
+            const update = -param.m / sqrtV; // the -sign is because we update params with -=
+            const tableRow = document.createElement('tr');
+            tableRow.innerHTML = `
+                <td style="color: ${param.data >= 0 ? '#45a049' : '#e06666'}">${param.data.toFixed(4)}</td>
+                <td style="color: ${update >= 0 ? '#45a049' : '#e06666'}">${update.toFixed(4)}</td>
+                <td style="color: ${param.grad >= 0 ? '#45a049' : '#e06666'}">${param.grad.toFixed(4)}</td>
+                <td style="color: ${param.m >= 0 ? '#45a049' : '#e06666'}">${param.m.toFixed(4)}</td>
+                <td style="color: ${sqrtV >= 0 ? '#45a049' : '#e06666'}">${sqrtV.toFixed(4)}</td>
+            `;
+            table.appendChild(tableRow);
+        }
+
+        optimizerDiv.appendChild(table);
+    }
 }
 
 let step = 0;
