@@ -74,7 +74,10 @@ function train_step() {
   loss.backward();
   // update with AdamW
   optimizer.step();
+
+  // render the optimizer parameters
   renderOptimizerParam();
+
   optimizer.zeroGrad();
   return loss.data;
 }
@@ -175,4 +178,5 @@ function trainAndRenderStep() {
     setTimeout(trainAndRenderStep, 100);
   }
 }
+
 trainAndRenderStep();
