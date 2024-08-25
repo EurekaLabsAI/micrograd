@@ -282,7 +282,7 @@ for step in range(num_steps):
     print(f"step {step+1}/{num_steps}, train loss {loss.data}")
 
 # (optional) visualization at the end: take origin (0,0) and draw the computational graph
-x, y = (0.0, 0.0), 0
+x, y = (Value(0.0), Value(0.0)), 0
 logits = model(x)
 loss = cross_entropy(logits, y)
 loss.backward()
