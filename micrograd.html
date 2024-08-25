@@ -51,6 +51,13 @@
         </div>
     </div>
 
+    <!-- New container for the checkbox -->
+    <div class="container">
+        <label>
+            <input type="checkbox" id="show-level-sets" checked> Show level set lines
+        </label>
+    </div>
+
     <!-- The micrograd JavaScript lib -->
     <script src="micrograd.js"></script>
 
@@ -136,21 +143,24 @@ function renderCanvas(minX = -2, minY = -2, maxX = 2, maxY = 2) {
     }
 
     // Render the 0-level set of all individual neurons
-    for (const neuron of model.layers[0].neurons) {
-        const w0 = neuron.w[0].data;
-        const w1 = neuron.w[1].data;
-        const b = neuron.b.data;
-        const x1 = -2;
-        const y1 = (-b - w0 * x1) / w1;
-        const x2 = 2;
-        const y2 = (-b - w0 * x2) / w1;
-        const [canvasX1, canvasY1] = mapToCanvas(x1, y1);
-        const [canvasX2, canvasY2] = mapToCanvas(x2, y2);
-        ctx.strokeStyle = 'white';
-        ctx.beginPath();
-        ctx.moveTo(canvasX1, canvasY1);
-        ctx.lineTo(canvasX2, canvasY2);
-        ctx.stroke();
+    const showLevelSets = document.getElementById('show-level-sets').checked;
+    if (showLevelSets) {
+        for (const neuron of model.layers[0].neurons) {
+            const w0 = neuron.w[0].data;
+            const w1 = neuron.w[1].data;
+            const b = neuron.b.data;
+            const x1 = -2;
+            const y1 = (-b - w0 * x1) / w1;
+            const x2 = 2;
+            const y2 = (-b - w0 * x2) / w1;
+            const [canvasX1, canvasY1] = mapToCanvas(x1, y1);
+            const [canvasX2, canvasY2] = mapToCanvas(x2, y2);
+            ctx.strokeStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(canvasX1, canvasY1);
+            ctx.lineTo(canvasX2, canvasY2);
+            ctx.stroke();
+        }
     }
 }
 
@@ -217,6 +227,12 @@ function trainAndRenderStep() {
         setTimeout(trainAndRenderStep, 100);
     }
 }
+
+// Add event listener for checkbox changes
+document.getElementById('show-level-sets').addEventListener('change', () => {
+    renderCanvas();
+});
+
 trainAndRenderStep();
 
 </script>
