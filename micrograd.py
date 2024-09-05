@@ -270,7 +270,7 @@ def loss_fun(model, split):
     return mean_loss
 
 # train the network
-num_steps = 3
+num_steps = 100
 for step in range(num_steps):
 
     # evaluate the validation split every few steps
