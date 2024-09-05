@@ -314,8 +314,9 @@ class MLP extends Module {
 
 function crossEntropy(logits, target) {
   // subtract the max for numerical stability (avoids overflow)
-  const maxVal = Math.max(...logits.map(val => val.data));
-  logits = logits.map(val => val.add(-maxVal));
+  // commenting these two lines out to get a cleaner visualization
+  // const maxVal = Math.max(...logits.map(val => val.data));
+  // logits = logits.map(val => val.add(-maxVal));
   // 1) evaluate elementwise e^x
   const ex = logits.map(x => x.exp());
   // 2) compute the sum of the above

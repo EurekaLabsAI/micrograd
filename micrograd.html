@@ -9,6 +9,13 @@
             margin: 0;
             padding: 0;
         }
+        h1 {
+            text-align: center;
+            font-family: 'Arial', sans-serif;
+            color: #333;
+            padding: 5px;
+            margin: 0px;
+        }
         #canvas-div {
             margin: 5px;
         }
@@ -19,12 +26,16 @@
             display: flex;
             justify-content: flex-start;
             align-items: flex-start;
+            max-width: 100%;
+            overflow-x: hidden;
         }
         #optimizer-div {
             margin: 5px;
             font-size: 16px;
             max-height: 500px;
             overflow-y: auto;
+            border: 1px solid black;
+            flex: 1;
         }
         #optimizer-div table {
             border-collapse: collapse;
@@ -37,9 +48,27 @@
         #optimizer-div th {
             background-color: #f2f2f2;
         }
+        #graph-div {
+            margin: 5px;
+            width: calc(100% - 10px);  /* Subtract margin from width */
+            border: 1px solid black;
+            overflow: hidden;
+        }
+        #graph-div img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
     </style>
 </head>
 <body>
+    <h1>micograd live demo</h1>
+
+    <div class="container">
+        <div id="graph-div">
+            <img src="graph.svg" alt="graph" id="svgImage">
+        </div>
+    </div>
 
     <div class="container">
         <!-- The canvas div that displays the current decision boundary of the MLP -->
@@ -228,11 +257,73 @@ function trainAndRenderStep() {
     }
 }
 
-// Add event listener for checkbox changes
+// Add event listener for "show level sets" checkbox changes
 document.getElementById('show-level-sets').addEventListener('change', () => {
     renderCanvas();
 });
 
+// Give the SVG ability to pan/zoom
+function makeGraphPanZoom() {
+    const svgImage = document.getElementById("svgImage");
+    const svgContainer = document.getElementById("graph-div");
+
+    let scale = 1;
+    let panning = false;
+    let startPoint = { x: 0, y: 0 };
+    let endPoint = { x: 0, y: 0 };
+
+    svgContainer.style.overflow = 'hidden';
+    svgImage.style.transformOrigin = '0 0';
+
+    function setTransform() {
+        svgImage.style.transform = `translate(${endPoint.x}px, ${endPoint.y}px) scale(${scale})`;
+    }
+
+    svgContainer.onwheel = function(e) {
+        e.preventDefault();
+        const rect = svgContainer.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newScale = scale * zoomFactor;
+
+        endPoint.x = mouseX - (mouseX - endPoint.x) * zoomFactor;
+        endPoint.y = mouseY - (mouseY - endPoint.y) * zoomFactor;
+
+        scale = newScale;
+        setTransform();
+    }
+
+    svgContainer.onmousedown = function(e) {
+        e.preventDefault();
+        startPoint = { x: e.clientX - endPoint.x, y: e.clientY - endPoint.y };
+        panning = true;
+    }
+
+    svgContainer.onmouseup = function(e) {
+        panning = false;
+    }
+
+    svgContainer.onmousemove = function(e) {
+        e.preventDefault();
+        if (!panning) {
+            return;
+        }
+        endPoint = {
+            x: e.clientX - startPoint.x,
+            y: e.clientY - startPoint.y
+        };
+        setTransform();
+    }
+
+    svgContainer.onmouseleave = function(e) {
+        panning = false;
+    }
+}
+makeGraphPanZoom();
+
+// Start the training loop
 trainAndRenderStep();
 
 </script>

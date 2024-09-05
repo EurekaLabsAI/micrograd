@@ -3,7 +3,7 @@ Defines a simple autograd engine and uses it to classify points in the plane
 to 3 classes (red, green, blue) using a simple multilayer perceptron (MLP).
 """
 import math
-from utils import RNG, gen_data_yinyang, draw_dot
+from utils import RNG, gen_data_yinyang, draw_dot, vis_color
 random = RNG(42)
 
 # -----------------------------------------------------------------------------
@@ -149,6 +149,8 @@ class Neuron(Module):
         self.w = [Value(random.uniform(-1, 1) * nin**-0.5) for _ in range(nin)]
         self.b = Value(0)
         self.nonlin = nonlin
+        # color the neuron params light green (only used in graphviz visualization)
+        vis_color([self.b] + self.w, "lightgreen")
 
     def __call__(self, x):
         act = sum((wi*xi for wi,xi in zip(self.w, x)), self.b)
@@ -199,8 +201,9 @@ class MLP(Module):
 
 def cross_entropy(logits, target):
     # subtract the max for numerical stability (avoids overflow)
-    max_val = max(val.data for val in logits)
-    logits = [val - max_val for val in logits]
+    # commenting these two lines out to get a cleaner visualization
+    # max_val = max(val.data for val in logits)
+    # logits = [val - max_val for val in logits]
     # 1) evaluate elementwise e^x
     ex = [x.exp() for x in logits]
     # 2) compute the sum of the above
@@ -287,6 +290,8 @@ logits = model(x)
 loss = cross_entropy(logits, y)
 loss.backward()
 try:
+    vis_color(x, "lightblue") # color the inputs light blue in the visualization
+    vis_color(logits, "lightyellow") # color the logits light yellow in the visualization
     draw_dot(loss)
 except Exception as e:
     print("graphviz not installed? skipped visualization")

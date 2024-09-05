@@ -76,7 +76,13 @@ def gen_data_yinyang(random: RNG, n=1000, r_small=0.1, r_big=0.5):
 # -----------------------------------------------------------------------------
 # visualization related
 
+def vis_color(nodes, color):
+    # colors a set of nodes (for visualization)
+    for n in nodes:
+        setattr(n, '_vis_color', color)
+
 def trace(root):
+    # traces the full graph of nodes and edges starting from the root
     nodes, edges = set(), set()
     def build(v):
         if v not in nodes:
@@ -97,16 +103,18 @@ def draw_dot(root, format='svg', rankdir='LR', outfile='graph'):
     from graphviz import Digraph
     assert rankdir in ['LR', 'TB']
     nodes, edges = trace(root)
-    dot = Digraph(format=format, graph_attr={'rankdir': rankdir})
+    dot = Digraph(format=format, graph_attr={'rankdir': rankdir, 'nodesep': '0.1', 'ranksep': '0.4'})
 
     for n in nodes:
-        dot.node(name=str(id(n)), label = "{ data %.4f | grad %.4f }" % (n.data, n.grad), shape='record', style='filled', fillcolor='white')
+        fillcolor = n._vis_color if hasattr(n, '_vis_color') else "white"
+        dot.node(name=str(id(n)), label="data: %.4f\ngrad: %.4f" % (n.data, n.grad), shape='box', style='filled', fillcolor=fillcolor, width='0.1', height='0.1', fontsize='10')
         if n._op:
-            dot.node(name=str(id(n)) + n._op, label=n._op)
-            dot.edge(str(id(n)) + n._op, str(id(n)))
+            dot.node(name=str(id(n)) + n._op, label=n._op, width='0.1', height='0.1', fontsize='10')
+            dot.edge(str(id(n)) + n._op, str(id(n)), minlen='1')
 
     for n1, n2 in edges:
-        dot.edge(str(id(n1)), str(id(n2)) + n2._op)
+        dot.edge(str(id(n1)), str(id(n2)) + n2._op, minlen='1')
 
+    print("found a total of ", len(nodes), "nodes and", len(edges), "edges")
     print("saving graph to", outfile + "." + format)
     dot.render(outfile, format=format)
