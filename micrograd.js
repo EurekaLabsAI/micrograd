@@ -97,12 +97,12 @@ function genDataYinYang(random, n = 1000, rSmall = 0.1, rBig = 0.5) {
 The Value object stores a single scalar number and its gradient.
 */
 class Value {
-  constructor(data, _children = [], _op = '') {
+  constructor(data, _prev = [], _op = '') {
       this.data = data;
       this.grad = 0;
       // internal variables used for autograd graph construction
       this._backward = () => {};
-      this._prev = new Set(_children);
+      this._prev = _prev;
       this._op = _op; // the op that produced this node, for graphviz / debugging / etc
   }
 
@@ -184,7 +184,7 @@ class Value {
   }
 
   neg() {
-      return this.mul(-1);
+      return this.mul(-1.0);
   }
 
   sub(other) {
@@ -275,7 +275,7 @@ class Layer extends Module {
 
   forward(x) {
       const out = this.neurons.map(n => n.forward(x));
-      return out.length === 1 ? out[0] : out;
+      return out;
   }
 
   parameters() {
@@ -320,7 +320,7 @@ function crossEntropy(logits, target) {
   // 1) evaluate elementwise e^x
   const ex = logits.map(x => x.exp());
   // 2) compute the sum of the above
-  const denom = ex.reduce((a, b) => a.add(b));
+  const denom = ex.reduce((a, b) => a.add(b), new Value(0));
   // 3) normalize by the sum to get probabilities
   const probs = ex.map(x => x.div(denom));
   // 4) log the probabilities at target

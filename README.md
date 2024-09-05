@@ -16,9 +16,14 @@ Covers:
 - Neural network (NN) with 1 hidden layer (MLP) built on top of it
 - Training loop: loss function, backpropagation, parameter updates
 
+**Interactive Demo**. There is a nice visaulization of the "action" during training, showing the exact computational graph. The full computational graph includes the entire dataset which is too much. So instead, here we pick a single datapoint to forward through the network and show that graph alone. In this case we're forwarding the origin (0,0) and a fictional label 0, running the forward pass and the loss, doing backward, and then showing the data/grads. The process to get this visualization working:
+
+1. First run `python micrograd.py` and make sure it saves the `graph.svg`, which is the connectivity graph. You'll need to install graphviz if you don't have it. E.g. on my MacBook this is `brew install graphviz` followed by `pip install graphviz`.
+2. Once we have the `graph.svg` file, we load it from the HTML. Because of cross-origin security issues when loading the svg from the file system, we can't just open up the HTML page directly and need to serve these files. The easiest way is to run a simple python webserver with `python -m http.server`. Then open up the localhost URL it gives you, and open the `micrograd.html` page. You'll see a really cool visualization of the training process yay!
+
 TODOs:
 - Parallel implementation in C that prints the same thing
-- A very nice interactive web demo in the style of this [JavaScript web demo](https://cs.stanford.edu/~karpathy/svmjs/demo/demonn.html) I wrote forever ago. The computational graph is shown on top (in a very similar format to what graphviz prints when you run micrograd.py), it is dynamically updating the data/grad values, and you can "step" using buttons, or hit "play" to optimize. Below that is shown the JavaScript web demo style visualization showing the datapoints and the current decision boundary. The user can add/modify datapoints and see how the neural network responds to it. The user can also pause the optimization and inspect the current state of the network, including the computational graph and the data/grad values in all of the nodes.
+- Many improvements to the interactive web demo. Should be able to step through the optimization in more detail, select the "fictional" example to forward through the graph, possibly add/delete datapoints and see how the network responds to it, etc. Probably the entire visualization can be made significantly nicer.
 
 ### License
 

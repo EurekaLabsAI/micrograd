@@ -83,12 +83,13 @@ def vis_color(nodes, color):
 
 def trace(root):
     # traces the full graph of nodes and edges starting from the root
-    nodes, edges = set(), set()
+    nodes, edges = [], []
     def build(v):
         if v not in nodes:
-            nodes.add(v)
+            nodes.append(v)
             for child in v._prev:
-                edges.add((child, v))
+                if (child, v) not in edges:
+                    edges.append((child, v))
                 build(child)
     build(root)
     return nodes, edges

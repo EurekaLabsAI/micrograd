@@ -12,12 +12,12 @@ random = RNG(42)
 class Value:
     """ stores a single scalar value and its gradient """
 
-    def __init__(self, data, _children=(), _op=''):
+    def __init__(self, data, _prev=(), _op=''):
         self.data = data
         self.grad = 0
         # internal variables used for autograd graph construction
         self._backward = lambda: None
-        self._prev = set(_children)
+        self._prev = _prev
         self._op = _op # the op that produced this node, for graphviz / debugging / etc
 
     def __add__(self, other):
@@ -108,7 +108,7 @@ class Value:
             v._backward()
 
     def __neg__(self): # -self
-        return self * -1
+        return self * -1.0
 
     def __radd__(self, other): # other + self
         return self + other
@@ -261,12 +261,16 @@ optimizer = AdamW(model.parameters(), lr=1e-1, weight_decay=1e-4)
 
 def loss_fun(model, split):
     # evaluate the loss function on a given data split
-    losses = [cross_entropy(model(x), y) for x, y in split]
-    mean_loss = sum(losses) / len(losses)
+    total_loss = Value(0.0)
+    for x, y in split:
+        logits = model(x)
+        loss = cross_entropy(logits, y)
+        total_loss = total_loss + loss
+    mean_loss = total_loss * (1.0 / len(split))
     return mean_loss
 
 # train the network
-num_steps = 100
+num_steps = 3
 for step in range(num_steps):
 
     # evaluate the validation split every few steps
@@ -286,12 +290,10 @@ for step in range(num_steps):
 
 # (optional) visualization at the end: take origin (0,0) and draw the computational graph
 x, y = (Value(0.0), Value(0.0)), 0
-logits = model(x)
-loss = cross_entropy(logits, y)
+loss = loss_fun(model, [(x, y)])
 loss.backward()
 try:
     vis_color(x, "lightblue") # color the inputs light blue in the visualization
-    vis_color(logits, "lightyellow") # color the logits light yellow in the visualization
     draw_dot(loss)
 except Exception as e:
     print("graphviz not installed? skipped visualization")

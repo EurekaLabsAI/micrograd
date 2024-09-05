@@ -8,6 +8,7 @@
         body, html {
             margin: 0;
             padding: 0;
+            padding-bottom: 100px;
         }
         h1 {
             text-align: center;
@@ -18,6 +19,7 @@
         }
         #canvas-div {
             margin: 5px;
+            max-height: 510px;
         }
         #decision-canvas {
             border: 1px solid black;
@@ -59,14 +61,25 @@
             height: auto;
             display: block;
         }
+        #controls-div {
+            margin: 5px;
+            padding: 20px;
+            color: #333;
+            font-size: 16px;
+            border: 1px solid black;
+            flex: 1;
+        }
     </style>
 </head>
 <body>
     <h1>micograd live demo</h1>
 
+    <!-- The SVG that displays the computational graph of the MLP goes here -->
     <div class="container">
         <div id="graph-div">
-            <img src="graph.svg" alt="graph" id="svgImage">
+            <object id="svg-object" type="image/svg+xml" data="graph.svg" width="100%" height="100%">
+                Your browser does not support SVG
+            </object>
         </div>
     </div>
 
@@ -82,9 +95,11 @@
 
     <!-- New container for the checkbox -->
     <div class="container">
-        <label>
-            <input type="checkbox" id="show-level-sets" checked> Show level set lines
-        </label>
+        <div id="controls-div">
+            <label>
+                <input type="checkbox" id="show-level-sets" checked> Show level set lines
+            </label>
+        </div>
     </div>
 
     <!-- The micrograd JavaScript lib -->
@@ -104,14 +119,15 @@ const model = new MLP(2, [8, 3]);
 const optimizer = new AdamW(model.parameters(), 1e-1, [0.9, 0.95], 1e-8, 1e-4);
 
 function lossFun(model, split) {
-    // forward the network and the loss function on all training datapoints
-    let loss = new Value(0);
+    // evaluate the loss function on a given data split
+    let totalLoss = new Value(0.0);
     for (const [x, y] of split) {
-        const logits = model.forward([new Value(x[0]), new Value(x[1])]);
-        loss = loss.add(crossEntropy(logits, y));
+        const logits = model.forward(x);
+        const loss = crossEntropy(logits, y);
+        totalLoss = totalLoss.add(loss);
     }
-    loss = loss.mul(1.0 / split.length); // normalize the loss
-    return loss;
+    const meanLoss = totalLoss.mul(1.0 / split.length);
+    return meanLoss;
 }
 
 function renderCanvas(minX = -2, minY = -2, maxX = 2, maxY = 2) {
@@ -229,9 +245,81 @@ function renderOptimizerState(num_columns = 3) {
     }
 }
 
+function trace(root) {
+    // traces the full graph of nodes and edges starting from the root
+    const nodes = [];
+    const edges = [];
+
+    function build(v) {
+        if (!nodes.includes(v)) {
+            nodes.push(v);
+            for (const child of v._prev) {
+                if (!edges.some(edge => edge[0] === child && edge[1] === v)) {
+                    edges.push([child, v]);
+                }
+                build(child);
+            }
+        }
+    }
+
+    build(root);
+    return [nodes, edges];
+}
+
+function getGraphNodes() {
+    // returns a list of all the nodes in the graph
+    const svg = document.getElementById('svg-object').contentDocument;
+    const svg_nodes = svg.querySelectorAll('g.node');
+    // issue now is that there are two types of nodes:
+    // 1) the "operation" nodes for e.g. + / - / * ...
+    // 2) the actual "data" nodes. We can identify these by presence of "text" element
+    //    that mentions "data", for example. A bit janky but it works.
+    const data_nodes = [];
+    for (const node of svg_nodes) {
+        const text = node.querySelector('text');
+        if (text && text.textContent.includes("data")) {
+            data_nodes.push(node);
+        }
+    }
+    return data_nodes;
+}
+
+function renderGraph() {
+    // Step 1: forward some point of interest e.g. the origin (0,0), e.g. label 0:
+    const fwd_dataset = [[[new Value(0.0), new Value(0.0)], 0]];
+    const trainLoss = lossFun(model, fwd_dataset);
+    trainLoss.backward();
+    // Step 2: let's "walk" the graph and collect all the nodes and edges
+    const [nodes, edges] = trace(trainLoss);
+    // Step 3: get the list of all svg "g" elements of class "node"
+    const svg_nodes = getGraphNodes();
+    // Error checking: we should have as many nodes as there are svg nodes
+    if (svg_nodes.length != nodes.length) {
+        console.log("found a total of", svg_nodes.length, "svg nodes");
+        console.log("found a total of", nodes.length, "nodes and", edges.length, "edges");
+        console.log("ERROR: found a different number of nodes than expected");
+        return;
+    }
+    // print the nodes and their data/grad
+    for (let i = 0; i < svg_nodes.length; i++) {
+        // there should be exactly two "text" nodes in the svg node
+        const svg_node = svg_nodes[i];
+        const textNodes = svg_node.querySelectorAll('text');
+        if (textNodes.length != 2) {
+            console.log("ERROR: found a different number of text nodes than expected");
+            return;
+        }
+        const graph_node = nodes[i];
+        // the first text node is the data, second node is the grad
+        textNodes[0].textContent = "data: " + graph_node.data.toFixed(4);
+        textNodes[1].textContent = "grad: " + graph_node.grad.toFixed(4);
+    }
+}
+
 let step = 0;
+let numSteps = 100;
 function trainAndRenderStep() {
-    if (step < 100) {
+    if (step < numSteps) {
         // evaluate the validation split every few steps
         if (step % 10 === 0) {
             const valLoss = lossFun(model, valSplit);
@@ -244,16 +332,17 @@ function trainAndRenderStep() {
         // backward pass (deposit the gradients)
         trainLoss.backward();
 
-        // render the current state
-        renderCanvas();
-        renderOptimizerState();
-
         // update with AdamW
         optimizer.step();
-        optimizer.zeroGrad();
 
+        // all the visualizations
+        renderCanvas(); // show the top down view
+        renderOptimizerState(); // show the optimizer state
+        renderGraph(); // show the graph of nodes and edges
+
+        optimizer.zeroGrad();
         step++;
-        setTimeout(trainAndRenderStep, 100);
+        setTimeout(trainAndRenderStep, 250);
     }
 }
 
@@ -263,65 +352,81 @@ document.getElementById('show-level-sets').addEventListener('change', () => {
 });
 
 // Give the SVG ability to pan/zoom
-function makeGraphPanZoom() {
-    const svgImage = document.getElementById("svgImage");
-    const svgContainer = document.getElementById("graph-div");
+function enablePanZoom() {
+    const svgObject = document.getElementById('svg-object');
+    const svg = svgObject.contentDocument.documentElement;
+    if (!svg) {
+        console.error('SVG not found');
+        return;
+    }
 
-    let scale = 1;
-    let panning = false;
+    let viewBox = svg.viewBox.baseVal;
+    let isPanning = false;
     let startPoint = { x: 0, y: 0 };
     let endPoint = { x: 0, y: 0 };
+    let scale = 1;
 
-    svgContainer.style.overflow = 'hidden';
-    svgImage.style.transformOrigin = '0 0';
+    svg.addEventListener('mousedown', startPan);
+    svg.addEventListener('mousemove', pan);
+    svg.addEventListener('mouseup', endPan);
+    svg.addEventListener('mouseleave', endPan);
+    svg.addEventListener('wheel', zoom, { passive: false });
 
-    function setTransform() {
-        svgImage.style.transform = `translate(${endPoint.x}px, ${endPoint.y}px) scale(${scale})`;
+    // Touch events
+    svg.addEventListener('touchstart', startPan, { passive: false });
+    svg.addEventListener('touchmove', pan, { passive: false });
+    svg.addEventListener('touchend', endPan);
+    svg.addEventListener('touchcancel', endPan);
+
+    function getPointFromEvent(event) {
+        const point = svg.createSVGPoint();
+        point.x = event.clientX || (event.touches && event.touches[0].clientX);
+        point.y = event.clientY || (event.touches && event.touches[0].clientY);
+        return point.matrixTransform(svg.getScreenCTM().inverse());
     }
 
-    svgContainer.onwheel = function(e) {
-        e.preventDefault();
-        const rect = svgContainer.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-        const newScale = scale * zoomFactor;
-
-        endPoint.x = mouseX - (mouseX - endPoint.x) * zoomFactor;
-        endPoint.y = mouseY - (mouseY - endPoint.y) * zoomFactor;
-
-        scale = newScale;
-        setTransform();
+    function startPan(event) {
+        event.preventDefault();
+        isPanning = true;
+        startPoint = getPointFromEvent(event);
     }
 
-    svgContainer.onmousedown = function(e) {
-        e.preventDefault();
-        startPoint = { x: e.clientX - endPoint.x, y: e.clientY - endPoint.y };
-        panning = true;
+    function pan(event) {
+        if (!isPanning) return;
+        event.preventDefault();
+        endPoint = getPointFromEvent(event);
+        const dx = (startPoint.x - endPoint.x) / scale;
+        const dy = (startPoint.y - endPoint.y) / scale;
+        viewBox.x += dx;
+        viewBox.y += dy;
+        svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
+        startPoint = endPoint;
     }
 
-    svgContainer.onmouseup = function(e) {
-        panning = false;
+    function endPan() {
+        isPanning = false;
     }
 
-    svgContainer.onmousemove = function(e) {
-        e.preventDefault();
-        if (!panning) {
-            return;
-        }
-        endPoint = {
-            x: e.clientX - startPoint.x,
-            y: e.clientY - startPoint.y
-        };
-        setTransform();
-    }
+    function zoom(event) {
+        event.preventDefault();
+        const delta = event.deltaY;
+        const zoomPoint = getPointFromEvent(event);
+        const zoomFactor = delta > 0 ? 1.1 : 0.9;
 
-    svgContainer.onmouseleave = function(e) {
-        panning = false;
+        const oldWidth = viewBox.width;
+        const oldHeight = viewBox.height;
+        viewBox.width *= zoomFactor;
+        viewBox.height *= zoomFactor;
+
+        viewBox.x += (zoomPoint.x - viewBox.x) * (1 - zoomFactor);
+        viewBox.y += (zoomPoint.y - viewBox.y) * (1 - zoomFactor);
+
+        scale /= zoomFactor;
+
+        svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
     }
 }
-makeGraphPanZoom();
+document.getElementById('svg-object').addEventListener('load', enablePanZoom);
 
 // Start the training loop
 trainAndRenderStep();
