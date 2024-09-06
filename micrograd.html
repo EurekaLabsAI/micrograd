@@ -95,9 +95,19 @@
     <!-- Container for the control panel -->
     <div class="container">
         <div id="controls-div">
+            <!-- Here we can set the datapoint of interest for the graph visualization -->
+            <div>
+                <span>Compute graph visualization datapoint:</span>
+                <label>X: <input type="number" id="fiction-x" value="0.0" step="0.1" style="width: 50px;"></label>
+                <label>Y: <input type="number" id="fiction-y" value="0.0" step="0.1" style="width: 50px;"></label>
+                <label>Label: <input type="number" id="fiction-label" value="0" min="0" max="2" step="1"></label>
+                <button id="apply-fiction" class="control-btn">Apply</button>
+            </div>
+            <!-- Here we can toggle the level set lines on and off -->
             <label>
                 <input type="checkbox" id="show-level-sets" checked> Show level set lines
             </label>
+            <!-- Here we can reset the demo, toggle the training loop on and off, and step through the optimization -->
             <div>
                 <button id="reset-btn" class="control-btn" title="Reset">reset</button>
                 <button id="toggle-btn" class="control-btn" title="Play/Pause">play/pause</button>
@@ -132,6 +142,8 @@ let step = 0;
 let numSteps = 100;
 let isPaused = false; // whether the training loop is paused
 let animationId = null; // id of the animation frame
+// the "fiction" datapoint that we will use to trace the graph
+let fwd_dataset = [[[new Value(0.0), new Value(0.0)], 0]];
 
 function lossFun(model, split) {
     // evaluate the loss function on a given data split
@@ -254,6 +266,15 @@ function renderCanvas(minX = -2, minY = -2, maxX = 2, maxY = 2) {
     ctx.fillStyle = 'white';
     ctx.font = '20px Arial';
     ctx.fillText(`step ${step} / ${numSteps}`, canvas.width - 120, 20);
+
+    // Render the fiction datapoint
+    const [canvasX, canvasY] = mapToCanvas(fwd_dataset[0][0][0].data, fwd_dataset[0][0][1].data);
+    ctx.fillStyle = 'yellow';
+    ctx.beginPath();
+    ctx.arc(canvasX, canvasY, 5, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.strokeStyle = 'black';
+    ctx.stroke();
 }
 
 function renderOptimizerState(num_columns = 3) {
@@ -336,7 +357,6 @@ function getGraphNodes() {
 
 function renderGraph() {
     // Step 1: forward some point of interest e.g. the origin (0,0), e.g. label 0:
-    const fwd_dataset = [[[new Value(0.0), new Value(0.0)], 0]];
     const trainLoss = lossFun(model, fwd_dataset);
     trainLoss.backward();
     // Step 2: let's "walk" the graph and collect all the nodes and edges
@@ -390,6 +410,21 @@ function trainAndRenderStep(schedule_next_step = true) {
         }
     }
 }
+
+function applyFictionDataPoint() {
+    // update the fiction datapoint
+    const x = parseFloat(document.getElementById('fiction-x').value);
+    const y = parseFloat(document.getElementById('fiction-y').value);
+    const label = parseInt(document.getElementById('fiction-label').value);
+    fwd_dataset = [[[new Value(x), new Value(y)], label]];
+    // we need to re-render the graph and the canvas
+    renderGraph();
+    renderCanvas();
+    // and color the label
+    const color = label === 0 ? 'red' : label === 1 ? 'green' : 'blue';
+    document.getElementById('fiction-label').style.color = color;
+}
+document.getElementById('apply-fiction').addEventListener('click', applyFictionDataPoint);
 
 // toggle play/pausebutton
 function toggleTraining() {
@@ -500,6 +535,7 @@ document.getElementById('svg-object').addEventListener('load', enablePanZoom);
 // Start the training loop
 trainAndRenderStep(true);
 document.getElementById('toggle-btn').style.backgroundColor = 'lightgreen';
+document.getElementById('fiction-label').style.color = 'red'; // at init the label is red for the fiction datapoint
 
 </script>
 </body>
