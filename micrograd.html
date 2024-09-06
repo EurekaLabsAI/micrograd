@@ -16,6 +16,7 @@
             color: #333;
             padding: 5px;
             margin: 0px;
+            font-size: 20px;
         }
         #canvas-div {
             margin: 5px;
@@ -65,9 +66,17 @@
             margin: 5px;
             padding: 20px;
             color: #333;
-            font-size: 16px;
-            border: 1px solid black;
+            font-size: 18px;
             flex: 1;
+        }
+        .control-btn {
+            margin: 0px;
+            padding: 5px 10px;
+            font-size: 20px;
+            cursor: pointer;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -83,6 +92,20 @@
         </div>
     </div>
 
+    <!-- Container for the control panel -->
+    <div class="container">
+        <div id="controls-div">
+            <label>
+                <input type="checkbox" id="show-level-sets" checked> Show level set lines
+            </label>
+            <div>
+                <button id="reset-btn" class="control-btn" title="Reset">reset</button>
+                <button id="toggle-btn" class="control-btn" title="Play/Pause">play/pause</button>
+                <button id="step-btn" class="control-btn" title="Step">step</button>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <!-- The canvas div that displays the current decision boundary of the MLP -->
         <div id="canvas-div">
@@ -93,30 +116,22 @@
         </div>
     </div>
 
-    <!-- New container for the checkbox -->
-    <div class="container">
-        <div id="controls-div">
-            <label>
-                <input type="checkbox" id="show-level-sets" checked> Show level set lines
-            </label>
-        </div>
-    </div>
-
     <!-- The micrograd JavaScript lib -->
     <script src="micrograd.js"></script>
 
+<!-- The "int main()" of the demo-->
 <script>
-// Create an instance of RNG with seed 42
-const random = new RNG(42);
-// Generate data using the genData function
-const dataSplits = genDataYinYang(random, 100);
-const trainSplit = dataSplits.train;
-const valSplit = dataSplits.validation;
-const testSplit = dataSplits.test;
-// init the model: 2D inputs, 8 neurons, 3 outputs (logits)
-const model = new MLP(2, [8, 3]);
-// optimize using AdamW
-const optimizer = new AdamW(model.parameters(), 1e-1, [0.9, 0.95], 1e-8, 1e-4);
+
+// global variables that hold the state of the demo
+let random;
+let dataSplits, trainSplit, valSplit, testSplit;
+let model;
+let optimizer;
+// optimization state
+let step = 0;
+let numSteps = 100;
+let isPaused = false; // whether the training loop is paused
+let animationId = null; // id of the animation frame
 
 function lossFun(model, split) {
     // evaluate the loss function on a given data split
@@ -129,6 +144,33 @@ function lossFun(model, split) {
     const meanLoss = totalLoss.mul(1.0 / split.length);
     return meanLoss;
 }
+
+// reset the demo to its initial state
+function reset() {
+    // Create an instance of RNG with seed 42
+    random = new RNG(42);
+    // Generate data using the genData function
+    dataSplits = genDataYinYang(random, 100);
+    trainSplit = dataSplits.train;
+    valSplit = dataSplits.validation;
+    testSplit = dataSplits.test;
+    // init the model: 2D inputs, 8 neurons, 3 outputs (logits)
+    model = new MLP(2, [8, 3]);
+    // optimize using AdamW
+    optimizer = new AdamW(model.parameters(), 1e-1, [0.9, 0.95], 1e-8, 1e-4);
+    // reset the step counter
+    step = 0;
+    // update all the vis with the initial state
+    const trainLoss = lossFun(model, trainSplit);
+    optimizer.zeroGrad();
+    trainLoss.backward();
+    renderCanvas(); // show the top down view
+    renderOptimizerState(); // show the optimizer state
+    renderGraph(); // show the graph of nodes and edges
+}
+reset();
+// when the reset button is clicked, reset the demo
+document.getElementById('reset-btn').addEventListener('click', reset);
 
 function renderCanvas(minX = -2, minY = -2, maxX = 2, maxY = 2) {
     // first render the datapoints
@@ -207,6 +249,11 @@ function renderCanvas(minX = -2, minY = -2, maxX = 2, maxY = 2) {
             ctx.stroke();
         }
     }
+
+    // Top right of the canvas render the step counter
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.fillText(`step ${step} / ${numSteps}`, canvas.width - 120, 20);
 }
 
 function renderOptimizerState(num_columns = 3) {
@@ -228,8 +275,11 @@ function renderOptimizerState(num_columns = 3) {
             if (index >= parameters.length) break;
 
             const param = parameters[index];
-            const sqrtV = Math.sqrt(param.v + 1e-8);
-            const update = -param.m / sqrtV; // the -sign is because we update params with -=
+            // calculate and show the "lookahead" m and v (but without the bias correction)
+            const m = optimizer.beta1 * param.m + (1 - optimizer.beta1) * param.grad;
+            const v = optimizer.beta2 * param.v + (1 - optimizer.beta2) * (param.grad ** 2);
+            const sqrtV = Math.sqrt(v + 1e-8);
+            const update = -m / sqrtV; // the -sign is because we update params with -=
             const tableRow = document.createElement('tr');
             tableRow.innerHTML = `
                 <td style="color: ${param.data >= 0 ? '#45a049' : '#e06666'}">${param.data.toFixed(4)}</td>
@@ -316,35 +366,54 @@ function renderGraph() {
     }
 }
 
-let step = 0;
-let numSteps = 100;
-function trainAndRenderStep() {
+function trainAndRenderStep(schedule_next_step = true) {
     if (step < numSteps) {
-        // evaluate the validation split every few steps
-        if (step % 10 === 0) {
-            const valLoss = lossFun(model, valSplit);
-            console.log(`step ${step+1}, val loss ${valLoss.data.toFixed(6)}`);
-        }
+        step++;
+
         // get the loss for the training split
         const trainLoss = lossFun(model, trainSplit);
-        console.log(`step ${step+1}, train loss ${trainLoss.data.toFixed(6)}`);
+        console.log(`step ${step}, train loss ${trainLoss.data.toFixed(6)}`);
 
-        // backward pass (deposit the gradients)
+        // backward pass (deposit the gradients, starting at zero gradients)
+        optimizer.zeroGrad();
         trainLoss.backward();
-
-        // update with AdamW
         optimizer.step();
 
-        // all the visualizations
+        // all the visualizations (data + grad)
         renderCanvas(); // show the top down view
         renderOptimizerState(); // show the optimizer state
         renderGraph(); // show the graph of nodes and edges
 
-        optimizer.zeroGrad();
-        step++;
-        setTimeout(trainAndRenderStep, 250);
+        // schedule the next step
+        if (schedule_next_step) {
+            animationId = setTimeout(() => trainAndRenderStep(true), 200);
+        }
     }
 }
+
+// toggle play/pausebutton
+function toggleTraining() {
+    isPaused = !isPaused;
+    if (isPaused) {
+        clearTimeout(animationId);
+        animationId = null;
+        // make the toggle button have red background
+        document.getElementById('toggle-btn').style.backgroundColor = 'lightcoral';
+    } else {
+        trainAndRenderStep(true);
+        // make the toggle button have green background
+        document.getElementById('toggle-btn').style.backgroundColor = 'lightgreen';
+    }
+}
+document.getElementById('toggle-btn').addEventListener('click', toggleTraining);
+
+// run a single step of the optimization (only if paused)
+function stepTraining() {
+    if (isPaused) {
+        trainAndRenderStep(false);
+    }
+}
+document.getElementById('step-btn').addEventListener('click', stepTraining);
 
 // Add event listener for "show level sets" checkbox changes
 document.getElementById('show-level-sets').addEventListener('change', () => {
@@ -429,7 +498,8 @@ function enablePanZoom() {
 document.getElementById('svg-object').addEventListener('load', enablePanZoom);
 
 // Start the training loop
-trainAndRenderStep();
+trainAndRenderStep(true);
+document.getElementById('toggle-btn').style.backgroundColor = 'lightgreen';
 
 </script>
 </body>
