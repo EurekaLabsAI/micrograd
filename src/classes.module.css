@@ -1,0 +1,27 @@
+.view {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    border-radius: 5px;
+    box-shadow: 0 0 30px #BCBCBC;
+    padding: 20px;
+    margin-bottom: 40px;
+}
+
+.add_card {
+    width: 200px;
+    height: 200px;
+    border: 4px dotted #BCBCBC;
+    border-radius: 5px;
+    margin-bottom: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48pt;
+    color: #BCBCBC;
+}
+
+.add_card:hover {
+    cursor: pointer;
+}
