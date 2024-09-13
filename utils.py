@@ -1,4 +1,5 @@
 # -----------------------------------------------------------------------------
+# rng related
 
 # class that mimics the random interface in Python, fully deterministic,
 # and in a way that we also control fully, and can also use in C, etc.
@@ -22,6 +23,9 @@ class RNG:
     def uniform(self, a=0.0, b=1.0):
         # random float32 in [a, b)
         return a + (b-a) * self.random()
+
+# -----------------------------------------------------------------------------
+# data related
 
 # Generates the Yin Yang dataset.
 # Thank you https://github.com/lkriener/yin_yang_data_set
@@ -68,3 +72,50 @@ def gen_data_yinyang(random: RNG, n=1000, r_small=0.1, r_big=0.5):
     val = pts[int(0.8 * n):int(0.9 * n)]
     te = pts[int(0.9 * n):]
     return tr, val, te
+
+# -----------------------------------------------------------------------------
+# visualization related
+
+def vis_color(nodes, color):
+    # colors a set of nodes (for visualization)
+    for n in nodes:
+        setattr(n, '_vis_color', color)
+
+def trace(root):
+    # traces the full graph of nodes and edges starting from the root
+    nodes, edges = [], []
+    def build(v):
+        if v not in nodes:
+            nodes.append(v)
+            for child in v._prev:
+                if (child, v) not in edges:
+                    edges.append((child, v))
+                build(child)
+    build(root)
+    return nodes, edges
+
+def draw_dot(root, format='svg', rankdir='LR', outfile='graph'):
+    """
+    format: png | svg | ...
+    rankdir: TB (top to bottom graph) | LR (left to right)
+    """
+    # brew install graphviz
+    # pip install graphviz
+    from graphviz import Digraph
+    assert rankdir in ['LR', 'TB']
+    nodes, edges = trace(root)
+    dot = Digraph(format=format, graph_attr={'rankdir': rankdir, 'nodesep': '0.1', 'ranksep': '0.4'})
+
+    for n in nodes:
+        fillcolor = n._vis_color if hasattr(n, '_vis_color') else "white"
+        dot.node(name=str(id(n)), label="data: %.4f\ngrad: %.4f" % (n.data, n.grad), shape='box', style='filled', fillcolor=fillcolor, width='0.1', height='0.1', fontsize='10')
+        if n._op:
+            dot.node(name=str(id(n)) + n._op, label=n._op, width='0.1', height='0.1', fontsize='10')
+            dot.edge(str(id(n)) + n._op, str(id(n)), minlen='1')
+
+    for n1, n2 in edges:
+        dot.edge(str(id(n1)), str(id(n2)) + n2._op, minlen='1')
+
+    print("found a total of ", len(nodes), "nodes and", len(edges), "edges")
+    print("saving graph to", outfile + "." + format)
+    dot.render(outfile, format=format)

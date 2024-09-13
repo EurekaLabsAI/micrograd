@@ -1,70 +1,30 @@
-# Getting Started with Create React App
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+# micrograd
 
-## Available Scripts
+> micrograd is the only piece of code you need to train neural networks. Everything else is just efficiency.
 
-In the project directory, you can run:
+In this module we build a tiny "autograd" engine (short for automatic gradient) that implements the backpropagation algorithm, as it was prominently popularized for training neural networks in the 1986 paper [Learning Internal Representations by Error Propagation](https://stanford.edu/~jlmcc/papers/PDP/Volume%201/Chap8_PDP86.pdf) by Rumelhart, Hinton and Williams. This repository builds on the earlier repo [karpathy/micrograd](https://github.com/karpathy/micrograd), but modifies into into an LLM101n module.
 
-### `npm start`
+The code we build here is the heart of neural network training - it allows us to calculate how we should update the parameters of a neural network in order to make it better at some task, such as the one of next token prediction in autoregressive language models. This exact same algorithm is used in all modern deep learning libraries, such as PyTorch, TensorFlow, JAX, and others, except that those libraries are much more optimized and feature-rich.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+!WIP!
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Very early draft, putting up a possible first version of what I have in mind. In simple terms, 3-way classification for 2D training data. Very visual, easy to understand, good for intuition building.
 
-### `npm test`
+Covers:
+- Autograd engine (micrograd)
+- Neural network (NN) with 1 hidden layer (MLP) built on top of it
+- Training loop: loss function, backpropagation, parameter updates
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+**Interactive Demo**. There is a nice visaulization of the "action" during training, showing the exact computational graph. The full computational graph includes the entire dataset which is too much. So instead, here we pick a single datapoint to forward through the network and show that graph alone. In this case we're forwarding the origin (0,0) and a fictional label 0, running the forward pass and the loss, doing backward, and then showing the data/grads. The process to get this visualization working:
 
-### `npm run build`
+1. First run `python micrograd.py` and make sure it saves the `graph.svg`, which is the connectivity graph. You'll need to install graphviz if you don't have it. E.g. on my MacBook this is `brew install graphviz` followed by `pip install graphviz`.
+2. Once we have the `graph.svg` file, we load it from the HTML. Because of cross-origin security issues when loading the svg from the file system, we can't just open up the HTML page directly and need to serve these files. The easiest way is to run a simple python webserver with `python -m http.server`. Then open up the localhost URL it gives you, and open the `micrograd.html` page. You'll see a really cool visualization of the training process yay!
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+TODOs:
+- Parallel implementation in C that prints the same thing
+- Many improvements to the interactive web demo. Should be able to step through the optimization in more detail, select the "fictional" example to forward through the graph, possibly add/delete datapoints and see how the network responds to it, etc. Probably the entire visualization can be made significantly nicer.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### License
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+MIT
