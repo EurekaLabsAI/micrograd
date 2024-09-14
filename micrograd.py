@@ -3,23 +3,21 @@ Defines a simple autograd engine and uses it to classify points in the plane
 to 3 classes (red, green, blue) using a simple multilayer perceptron (MLP).
 """
 import math
-
-from utils import RNG, gen_data
-
+from utils import RNG, gen_data_yinyang, draw_dot, vis_color
 random = RNG(42)
 
 # -----------------------------------------------------------------------------
-# Value
+# Value. Similar to PyTorch's Tensor but only of size 1 element
 
 class Value:
     """ stores a single scalar value and its gradient """
 
-    def __init__(self, data, _children=(), _op=''):
+    def __init__(self, data, _prev=(), _op=''):
         self.data = data
         self.grad = 0
         # internal variables used for autograd graph construction
         self._backward = lambda: None
-        self._prev = set(_children)
+        self._prev = _prev
         self._op = _op # the op that produced this node, for graphviz / debugging / etc
 
     def __add__(self, other):
@@ -76,7 +74,7 @@ class Value:
         out = Value(math.exp(self.data), (self,), 'exp')
 
         def _backward():
-            self.grad += math.exp(self.data) * out.grad
+            self.grad += out.data * out.grad
         out._backward = _backward
 
         return out
@@ -110,7 +108,7 @@ class Value:
             v._backward()
 
     def __neg__(self): # -self
-        return self * -1
+        return self * -1.0
 
     def __radd__(self, other): # other + self
         return self + other
@@ -134,7 +132,7 @@ class Value:
         return f"Value(data={self.data}, grad={self.grad})"
 
 # -----------------------------------------------------------------------------
-# Multi-Layer Perceptron (MLP) network
+# Multi-Layer Perceptron (MLP) network. Module here is similar to PyTorch's nn.Module
 
 class Module:
 
@@ -151,6 +149,8 @@ class Neuron(Module):
         self.w = [Value(random.uniform(-1, 1) * nin**-0.5) for _ in range(nin)]
         self.b = Value(0)
         self.nonlin = nonlin
+        # color the neuron params light green (only used in graphviz visualization)
+        vis_color([self.b] + self.w, "lightgreen")
 
     def __call__(self, x):
         act = sum((wi*xi for wi,xi in zip(self.w, x)), self.b)
@@ -169,7 +169,7 @@ class Layer(Module):
 
     def __call__(self, x):
         out = [n(x) for n in self.neurons]
-        return out[0] if len(out) == 1 else out
+        return out
 
     def parameters(self):
         return [p for n in self.neurons for p in n.parameters()]
@@ -197,11 +197,13 @@ class MLP(Module):
 # -----------------------------------------------------------------------------
 # loss function: the negative log likelihood (NLL) loss
 # NLL loss = CrossEntropy loss when the targets are one-hot vectors
+# same as PyTorch's F.cross_entropy
 
 def cross_entropy(logits, target):
     # subtract the max for numerical stability (avoids overflow)
-    max_val = max(val.data for val in logits)
-    logits = [val - max_val for val in logits]
+    # commenting these two lines out to get a cleaner visualization
+    # max_val = max(val.data for val in logits)
+    # logits = [val - max_val for val in logits]
     # 1) evaluate elementwise e^x
     ex = [x.exp() for x in logits]
     # 2) compute the sum of the above
@@ -215,58 +217,83 @@ def cross_entropy(logits, target):
     return nll
 
 # -----------------------------------------------------------------------------
-# evaluation utility to compute the loss on a given split of the dataset
+# The AdamW optimizer, same as PyTorch optim.AdamW
 
-def eval_split(model, split):
-    # evaluate the loss of a split
-    loss = Value(0)
-    for x, y in split:
-        logits = model([Value(x[0]), Value(x[1])])
-        loss += cross_entropy(logits, y)
-    loss = loss * (1.0/len(split)) # normalize the loss
-    return loss.data
+class AdamW:
+    def __init__(self, parameters, lr=1e-1, betas=(0.9, 0.95), eps=1e-8, weight_decay=0.0):
+        self.parameters = parameters
+        self.lr = lr
+        self.beta1, self.beta2 = betas
+        self.eps = eps
+        self.weight_decay = weight_decay
+        # state of the optimizer
+        self.t = 0 # step counter
+        for p in self.parameters:
+            p.m = 0 # first moment
+            p.v = 0 # second moment
+
+    def step(self):
+        self.t += 1
+        for p in self.parameters:
+            if p.grad is None:
+                continue
+            p.m = self.beta1 * p.m + (1 - self.beta1) * p.grad
+            p.v = self.beta2 * p.v + (1 - self.beta2) * (p.grad ** 2)
+            m_hat = p.m / (1 - self.beta1 ** self.t)
+            v_hat = p.v / (1 - self.beta2 ** self.t)
+            p.data -= self.lr * (m_hat / (v_hat ** 0.5 + 1e-8) + self.weight_decay * p.data)
+
+    def zero_grad(self):
+        for p in self.parameters:
+            p.grad = 0
 
 # -----------------------------------------------------------------------------
 # let's train!
 
-# generate a random dataset with 100 2-dimensional datapoints in 3 classes
-train_split, val_split, test_split = gen_data(random, n=100)
+# generate a dataset with 100 2-dimensional datapoints in 3 classes
+train_split, val_split, test_split = gen_data_yinyang(random, n=100)
 
-# init the model: 2D inputs, 16 neurons, 3 outputs (logits)
-model = MLP(2, [16, 3])
+# init the model: 2D inputs, 8 neurons, 3 outputs (logits)
+model = MLP(2, [8, 3])
 
-# optimize using Adam
-learning_rate = 1e-1
-beta1 = 0.9
-beta2 = 0.95
-weight_decay = 1e-4
-for p in model.parameters():
-    p.m = 0.0
-    p.v = 0.0
+# optimize using AdamW
+optimizer = AdamW(model.parameters(), lr=1e-1, weight_decay=1e-4)
 
-# train
-for step in range(100):
+def loss_fun(model, split):
+    # evaluate the loss function on a given data split
+    total_loss = Value(0.0)
+    for x, y in split:
+        logits = model(x)
+        loss = cross_entropy(logits, y)
+        total_loss = total_loss + loss
+    mean_loss = total_loss * (1.0 / len(split))
+    return mean_loss
+
+# train the network
+num_steps = 100
+for step in range(num_steps):
 
     # evaluate the validation split every few steps
     if step % 10 == 0:
-        val_loss = eval_split(model, val_split)
-        print(f"step {step}, val loss {val_loss:.6f}")
+        val_loss = loss_fun(model, val_split)
+        print(f"step {step+1}/{num_steps}, val loss {val_loss.data:.6f}")
 
-    # forward the network (get logits of all training datapoints)
-    loss = Value(0)
-    for x, y in train_split:
-        logits = model([Value(x[0]), Value(x[1])])
-        loss += cross_entropy(logits, y)
-    loss = loss * (1.0/len(train_split)) # normalize the loss
-    # backward pass (deposit the gradients)
+    # forward the network and the loss and all training datapoints
+    loss = loss_fun(model, train_split)
+    # backward pass (calculate the gradient of the loss w.r.t. the model parameters)
     loss.backward()
-    # update with AdamW
-    for p in model.parameters():
-        p.m = beta1 * p.m + (1 - beta1) * p.grad
-        p.v = beta2 * p.v + (1 - beta2) * p.grad**2
-        m_hat = p.m / (1 - beta1**(step+1))  # bias correction
-        v_hat = p.v / (1 - beta2**(step+1))
-        p.data -= learning_rate * (m_hat / (v_hat**0.5 + 1e-8) + weight_decay * p.data)
-    model.zero_grad() # never forget to clear those gradients! happens to everyone
+    # update model parameters
+    optimizer.step()
+    optimizer.zero_grad()
+    # print some stats
+    print(f"step {step+1}/{num_steps}, train loss {loss.data}")
 
-    print(f"step {step}, train loss {loss.data}")
+# (optional) visualization at the end: take origin (0,0) and draw the computational graph
+x, y = (Value(0.0), Value(0.0)), 0
+loss = loss_fun(model, [(x, y)])
+loss.backward()
+try:
+    vis_color(x, "lightblue") # color the inputs light blue in the visualization
+    draw_dot(loss)
+except Exception as e:
+    print("graphviz not installed? skipped visualization")
