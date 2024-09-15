@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>micrograd</title>
+    <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.9.0/lib/viz-standalone.js"></script>
     <style>
         body, html {
             margin: 0;
@@ -57,7 +58,8 @@
             border: 1px solid black;
             overflow: hidden;
         }
-        #graph-div img {
+
+        #graph-svg svg {
             max-width: 100%;
             height: auto;
             display: block;
@@ -80,16 +82,14 @@
         }
     </style>
 </head>
+
 <body>
-    <h1>micograd live demo</h1>
+    <h1>micrograd live demo</h1>
 
     <!-- The SVG that displays the computational graph of the MLP goes here -->
     <div class="container">
         <div id="graph-div">
-            <object id="svg-object" type="image/svg+xml" data="graph.svg" width="100%" height="100%">
-                <div>Either your browser does not support SVG</div>
-                <div>Or make sure to run `python micrograd.py` to generate the graph.svg file</div>
-            </object>
+            <!-- The SVG will be injected here by Graphviz(Viz.js) -->
         </div>
     </div>
 
@@ -111,8 +111,14 @@
             <!-- Here we can reset the demo, toggle the training loop on and off, and step through the optimization -->
             <div>
                 <button id="reset-btn" class="control-btn" title="Reset">reset</button>
-                <button id="toggle-btn" class="control-btn" title="Play/Pause">play/pause</button>
+                <button id="toggle-btn" class="control-btn" title="Play/Pause">pause</button>
                 <button id="step-btn" class="control-btn" title="Step">step</button>
+            </div>
+            <!-- Add MLP configuration inputs -->
+            <div>
+                <span>Number of neurons in the hidden layers (comma-separated layer sizes. eg: 3,4):</span>
+                <input type="text" id="mlp-config" value="8" style="width: 50px;">
+                <button id="apply-mlp-config" class="control-btn">Apply</button>
             </div>
         </div>
     </div>
@@ -138,6 +144,7 @@ let random;
 let dataSplits, trainSplit, valSplit, testSplit;
 let model;
 let optimizer;
+let svg_nodes; // to cache the svg nodes between training steps
 // optimization state
 let step = 0;
 let numSteps = 100;
@@ -145,6 +152,7 @@ let isPaused = false; // whether the training loop is paused
 let animationId = null; // id of the animation frame
 // the "fiction" datapoint that we will use to trace the graph
 let fwd_dataset = [[[new Value(0.0), new Value(0.0)], 0]];
+setValuesType(fwd_dataset[0][0], "input");
 
 function lossFun(model, split) {
     // evaluate the loss function on a given data split
@@ -167,8 +175,17 @@ function reset() {
     trainSplit = dataSplits.train;
     valSplit = dataSplits.validation;
     testSplit = dataSplits.test;
-    // init the model: 2D inputs, 8 neurons, 3 outputs (logits)
-    model = new MLP(2, [8, 3]);
+    // Get the MLP configuration from the input
+    const mlpConfigStr = document.getElementById('mlp-config').value;
+    const mlpConfig = mlpConfigStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    if (mlpConfig.length === 0) {
+        alert('Invalid MLP configuration. Please enter a comma-separated list of integers.');
+        return;
+    }
+    // init the model: 2D inputs, user-specified hidden layers, and 3 outputs (logits)
+    // The dataset is 2D, so the input layer has 2 neurons, 
+    // and there are 3 classes to predict, so the output layer has 3 neurons.
+    model = new MLP(2, mlpConfig.concat([3]));
     // optimize using AdamW
     optimizer = new AdamW(model.parameters(), 1e-1, [0.9, 0.95], 1e-8, 1e-4);
     // reset the step counter
@@ -180,10 +197,12 @@ function reset() {
     renderCanvas(); // show the top down view
     renderOptimizerState(); // show the optimizer state
     renderGraph(); // show the graph of nodes and edges
+    pauseTraining(); // pause the training loop
 }
-reset();
 // when the reset button is clicked, reset the demo
 document.getElementById('reset-btn').addEventListener('click', reset);
+// Add event listener for applying MLP configuration
+document.getElementById('apply-mlp-config').addEventListener('click', reset);
 
 function renderCanvas(minX = -2, minY = -2, maxX = 2, maxY = 2) {
     // first render the datapoints
@@ -321,14 +340,14 @@ function trace(root) {
     // traces the full graph of nodes and edges starting from the root
     const nodes = [];
     const edges = [];
+    const visited = new Set();
 
     function build(v) {
-        if (!nodes.includes(v)) {
+        if (!visited.has(v)) {
+            visited.add(v);
             nodes.push(v);
             for (const child of v._prev) {
-                if (!edges.some(edge => edge[0] === child && edge[1] === v)) {
-                    edges.push([child, v]);
-                }
+                edges.push([child, v]);
                 build(child);
             }
         }
@@ -338,16 +357,87 @@ function trace(root) {
     return [nodes, edges];
 }
 
+function renderSVG(nodes, edges) {
+
+    const nodeTypeToColor = {
+        'input': 'lightblue',
+        'param': 'lightgreen',
+        'loss': 'lightcoral',
+    };
+
+    // Step 1: Generate DOT code
+    let dot = 'digraph G {\n';
+    dot += '    rankdir=LR;\n';
+    dot += '    nodesep=0.1;\n';
+    dot += '    ranksep=0.3;\n';
+    dot += '    node [shape=record, height=0.1, fontsize=10];\n';
+
+    // Assign IDs to nodes
+    const nodeIds = new Map();
+    let nodeIdCounter = 0;
+    nodes.forEach(node => {
+        nodeIds.set(node, 'node' + nodeIdCounter++);
+    });
+
+    // Generate nodes
+    nodes.forEach(node => {
+        const nodeId = nodeIds.get(node);
+        const label = `data: ${node.data.toFixed(4)}\\ngrad: ${node.grad.toFixed(4)}`;
+        const fillcolor = node._type ? nodeTypeToColor[node._type] : 'white';
+        dot += `    ${nodeId} [label="${label}", fillcolor="${fillcolor}", style="filled"];\n`;
+
+        if (node._op) {
+            const opNodeId = nodeId + '_op';
+            dot += `    ${opNodeId} [label="${node._op}", shape="circle"];\n`;
+            dot += `    ${opNodeId} -> ${nodeId};\n`;
+            node._prev.forEach(child => {
+                const childId = nodeIds.get(child);
+                dot += `    ${childId} -> ${opNodeId};\n`;
+            });
+        } else {
+            node._prev.forEach(child => {
+                const childId = nodeIds.get(child);
+                dot += `    ${childId} -> ${nodeId};\n`;
+            });
+        }
+    });
+
+    dot += '}';
+
+    // Step 2: Use graphviz (Viz.js) to render the DOT code
+    const container = document.getElementById('graph-div');
+
+    // Render SVG
+    const svg = graphviz.renderSVGElement(dot);
+
+    // Create a div to hold the SVG
+    const svgDiv = document.createElement('div');
+    svgDiv.id = 'graph-svg';
+    svgDiv.appendChild(svg);
+
+    // Remove existing SVG
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+
+    // Append the SVG to the container
+    container.appendChild(svgDiv);
+
+    // Enable pan and zoom using panzoom library
+    enablePanZoom();
+    svg_nodes = getGraphNodes();
+}
+
 function getGraphNodes() {
     // returns a list of all the nodes in the graph
-    const svg = document.getElementById('svg-object').contentDocument;
-    const svg_nodes = svg.querySelectorAll('g.node');
+    const svg = document.getElementById('graph-svg').querySelector('svg');
+    const all_svg_nodes = svg.querySelectorAll('g.node');
     // issue now is that there are two types of nodes:
     // 1) the "operation" nodes for e.g. + / - / * ...
     // 2) the actual "data" nodes. We can identify these by presence of "text" element
     //    that mentions "data", for example. A bit janky but it works.
     const data_nodes = [];
-    for (const node of svg_nodes) {
+    for (const node of all_svg_nodes) {
         const text = node.querySelector('text');
         if (text && text.textContent.includes("data")) {
             data_nodes.push(node);
@@ -356,14 +446,17 @@ function getGraphNodes() {
     return data_nodes;
 }
 
-function renderGraph() {
+function renderGraph(skipSVGRendering = false) {
     // Step 1: forward some point of interest e.g. the origin (0,0), e.g. label 0:
     const trainLoss = lossFun(model, fwd_dataset);
     trainLoss.backward();
     // Step 2: let's "walk" the graph and collect all the nodes and edges
     const [nodes, edges] = trace(trainLoss);
-    // Step 3: get the list of all svg "g" elements of class "node"
-    const svg_nodes = getGraphNodes();
+    // Step 3: generate the SVG of the graph
+    if (!skipSVGRendering) {
+        renderSVG(nodes);
+    }
+    // Step 4: set the data and grad values in the SVG nodes
     // Error checking: we should have as many nodes as there are svg nodes
     if (svg_nodes.length != nodes.length) {
         console.log("found a total of", svg_nodes.length, "svg nodes");
@@ -403,11 +496,11 @@ function trainAndRenderStep(schedule_next_step = true) {
         // all the visualizations (data + grad)
         renderCanvas(); // show the top down view
         renderOptimizerState(); // show the optimizer state
-        renderGraph(); // show the graph of nodes and edges
+        renderGraph(true); // show the graph of nodes and edges. no need to re-render the SVG
 
         // schedule the next step
-        if (schedule_next_step) {
-            animationId = setTimeout(() => trainAndRenderStep(true), 200);
+        if (schedule_next_step && !isPaused) {
+            animationId = setTimeout(() => trainAndRenderStep(true), 0);
         }
     }
 }
@@ -418,6 +511,8 @@ function applyFictionDataPoint() {
     const y = parseFloat(document.getElementById('fiction-y').value);
     const label = parseInt(document.getElementById('fiction-label').value);
     fwd_dataset = [[[new Value(x), new Value(y)], label]];
+    // Color the inputs light blue
+    setValuesType(fwd_dataset[0][0], "input");
     // we need to re-render the graph and the canvas
     renderGraph();
     renderCanvas();
@@ -427,18 +522,30 @@ function applyFictionDataPoint() {
 }
 document.getElementById('apply-fiction').addEventListener('click', applyFictionDataPoint);
 
-// toggle play/pausebutton
+// toggle play/pause button
+function pauseTraining() {
+    isPaused = true;
+    clearTimeout(animationId);
+    animationId = null;
+    // make the toggle button have red background
+    document.getElementById('toggle-btn').style.backgroundColor = 'lightgreen';
+    document.getElementById('toggle-btn').textContent = 'play';
+}
+
+function playTraining() {
+    isPaused = false;
+    trainAndRenderStep(true);
+    // make the toggle button have green background
+    document.getElementById('toggle-btn').style.backgroundColor = 'lightcoral';
+    document.getElementById('toggle-btn').textContent = 'pause';
+}
+
 function toggleTraining() {
     isPaused = !isPaused;
     if (isPaused) {
-        clearTimeout(animationId);
-        animationId = null;
-        // make the toggle button have red background
-        document.getElementById('toggle-btn').style.backgroundColor = 'lightcoral';
+        pauseTraining();
     } else {
-        trainAndRenderStep(true);
-        // make the toggle button have green background
-        document.getElementById('toggle-btn').style.backgroundColor = 'lightgreen';
+        playTraining();
     }
 }
 document.getElementById('toggle-btn').addEventListener('click', toggleTraining);
@@ -458,8 +565,7 @@ document.getElementById('show-level-sets').addEventListener('change', () => {
 
 // Give the SVG ability to pan/zoom
 function enablePanZoom() {
-    const svgObject = document.getElementById('svg-object');
-    const svg = svgObject.contentDocument.documentElement;
+    const svg = document.getElementById('graph-svg').firstChild;
     if (!svg) {
         console.error('SVG not found');
         return;
@@ -531,13 +637,14 @@ function enablePanZoom() {
         svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
     }
 }
-document.getElementById('svg-object').addEventListener('load', enablePanZoom);
-
 // Start the training loop
-trainAndRenderStep(true);
-document.getElementById('toggle-btn').style.backgroundColor = 'lightgreen';
-document.getElementById('fiction-label').style.color = 'red'; // at init the label is red for the fiction datapoint
-
+let graphviz;
+document.addEventListener('DOMContentLoaded', async function () {
+    graphviz = await Viz.instance();
+    reset();
+    trainAndRenderStep(true);
+    document.getElementById('fiction-label').style.color = 'red'; // at init the label is red for the fiction datapoint
+});
 </script>
 </body>
 </html>
