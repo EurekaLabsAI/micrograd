@@ -244,7 +244,7 @@ class Module {
   }
 }
 // for visualization purposes, type could be 'param', 'input', 'loss' etc.
-function setNodesType(nodes, type) {
+function setValuesType(nodes, type) {
   nodes.forEach(n => {
     n._type = type;
   });
@@ -257,7 +257,7 @@ class Neuron extends Module {
       this.w = Array(nin).fill().map(() => new Value(random.uniform(-1, 1) * scale));
       this.b = new Value(0);
       this.nonlin = nonlin;
-      setNodesType([this.b].concat(this.w), "param");
+      setValuesType([this.b].concat(this.w), "param");
   }
 
   forward(x) {
@@ -334,7 +334,7 @@ function crossEntropy(logits, target) {
   const logp = probs[target].log();
   // 5) the negative log likelihood loss (invert so we get a loss - lower is better)
   const nll = logp.mul(-1);
-  setNodesType([nll], "loss");
+  setValuesType([nll], "loss");
   return nll;
 }
 

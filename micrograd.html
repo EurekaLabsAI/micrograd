@@ -152,7 +152,7 @@ let isPaused = false; // whether the training loop is paused
 let animationId = null; // id of the animation frame
 // the "fiction" datapoint that we will use to trace the graph
 let fwd_dataset = [[[new Value(0.0), new Value(0.0)], 0]];
-setNodesType(fwd_dataset[0][0], "input");
+setValuesType(fwd_dataset[0][0], "input");
 
 function lossFun(model, split) {
     // evaluate the loss function on a given data split
@@ -323,12 +323,12 @@ function renderOptimizerState(num_columns = 3) {
             const update = -m / sqrtV; // the -sign is because we update params with -=
             const tableRow = document.createElement('tr');
             tableRow.innerHTML = `
-    <td style="color: ${param.data >= 0 ? '#45a049' : '#e06666'}">${param.data.toFixed(4)}</td>
-    <td style="color: ${update >= 0 ? '#45a049' : '#e06666'}">${update.toFixed(4)}</td>
-    <td style="color: ${param.grad >= 0 ? '#45a049' : '#e06666'}">${param.grad.toFixed(4)}</td>
-    <td style="color: ${param.m >= 0 ? '#45a049' : '#e06666'}">${param.m.toFixed(4)}</td>
-    <td style="color: ${sqrtV >= 0 ? '#45a049' : '#e06666'}">${sqrtV.toFixed(4)}</td>
-`;
+                <td style="color: ${param.data >= 0 ? '#45a049' : '#e06666'}">${param.data.toFixed(4)}</td>
+                <td style="color: ${update >= 0 ? '#45a049' : '#e06666'}">${update.toFixed(4)}</td>
+                <td style="color: ${param.grad >= 0 ? '#45a049' : '#e06666'}">${param.grad.toFixed(4)}</td>
+                <td style="color: ${param.m >= 0 ? '#45a049' : '#e06666'}">${param.m.toFixed(4)}</td>
+                <td style="color: ${sqrtV >= 0 ? '#45a049' : '#e06666'}">${sqrtV.toFixed(4)}</td>
+            `;
             table.appendChild(tableRow);
         }
 
@@ -512,7 +512,7 @@ function applyFictionDataPoint() {
     const label = parseInt(document.getElementById('fiction-label').value);
     fwd_dataset = [[[new Value(x), new Value(y)], label]];
     // Color the inputs light blue
-    setNodesType(fwd_dataset[0][0], "input");
+    setValuesType(fwd_dataset[0][0], "input");
     // we need to re-render the graph and the canvas
     renderGraph();
     renderCanvas();
