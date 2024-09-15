@@ -78,9 +78,36 @@ def gen_data_yinyang(random: RNG, n=1000, r_small=0.1, r_big=0.5):
 
 def vis_color(nodes, color):
     # colors a set of nodes (for visualization)
-    for n in nodes:
-        setattr(n, '_vis_color', color)
+    # allowing single node color setting too, for example for the loss node
+    if hasattr(nodes, "__len__"):
+        for n in nodes:
+            setattr(n, '_vis_color', color)
+    else:
+        setattr(nodes, '_vis_color', color)
 
+#apply vis to self andchild nodes once
+
+def vis_color_selfandChild(root,color):
+    setattr(root, '_vis_color', color)
+    for child in root._prev:
+         setattr(child, '_vis_color', color)
+
+#new visualization function for loss function
+
+def vis_color_entropy(root,color):
+    # traverse the tree till you get the identifying function in this case its exp
+    nodes, edges = [], []
+    def build(v):
+        if v not in nodes:
+            nodes.append(v)
+            setattr(v, '_vis_color', color)
+            for child in v._prev:
+                if v._op == 'exp':
+                    delattr(v,'_vis_color')
+                    setattr(v, '_vis_color', 'orange')
+                    break
+                build(child)
+    build(root)
 def trace(root):
     # traces the full graph of nodes and edges starting from the root
     nodes, edges = [], []
@@ -102,19 +129,80 @@ def draw_dot(root, format='svg', rankdir='LR', outfile='graph'):
     # brew install graphviz
     # pip install graphviz
     from graphviz import Digraph
-    assert rankdir in ['LR', 'TB']
+    assert rankdir in ['LR','TB']
     nodes, edges = trace(root)
-    dot = Digraph(format=format, graph_attr={'rankdir': rankdir, 'nodesep': '0.1', 'ranksep': '0.4'})
+    #increased rank step to beautify the cluster of lines on step 1 of the neural net
+    dot = Digraph(format=format, graph_attr={'rankdir': rankdir, 'nodesep': '0.1', 'ranksep': '0.8','newrank':'true'})
+
+
+    #creating cluster ie. vizgraph sections to cluster inputs,params. intermediate nodes and loss
+    with dot.subgraph(name='cluster0') as c:  
+        c.attr(label='Input',fontsize="30")
+        c.attr(rank='min')
+        c.attr(style='filled', color='lightgreen')
+  
+    with dot.subgraph(name='cluster2') as c:
+        c.attr(label='Loss',fontsize="30") 
+        c.attr(style='filled', color='lightblue')
+    with dot.subgraph(name='cluster3') as p:
+        p.attr(label='Parameter Nodes',fontsize="30")
+        p.attr(style='filled', color='lightyellow')
+        dot.unflatten(stagger =3)
+        c.attr(rank='same')
+
+    with dot.subgraph(name='cluster4') as intn:
+        intn.attr(label='Intermediate Nodes',fontsize="30") 
+        intn.attr(style='filled', color='grey91')
 
     for n in nodes:
         fillcolor = n._vis_color if hasattr(n, '_vis_color') else "white"
-        dot.node(name=str(id(n)), label="data: %.4f\ngrad: %.4f" % (n.data, n.grad), shape='box', style='filled', fillcolor=fillcolor, width='0.1', height='0.1', fontsize='10')
+
+        #add nodes to respective clusters based on the vis_color value
+        if hasattr(n, '_vis_color'):
+            if n._vis_color == 'lightblue':
+                with dot.subgraph(name='cluster0') as c:
+                    c.node(name=str(id(n)), label="data: %.4f\ngrad: %.4f" % (n.data, n.grad), shape='box', style='filled', fillcolor=fillcolor, width='0.1', height='0.1', fontsize='10')  
+            elif n._vis_color == 'lightgreen' or n._vis_color == 'blue':
+                with dot.subgraph(name='cluster3') as p:
+                        p.node(name=str(id(n)), label="data: %.4f\ngrad: %.4f" % (n.data, n.grad), shape='box', style='filled', fillcolor=fillcolor,pos='0, 0!', width='0.1', height='0.1', fontsize='10')  
+            elif n._vis_color == 'grey91':
+                with dot.subgraph(name='cluster2') as c:
+                    c.node(name=str(id(n)), label="data: %.4f\ngrad: %.4f" % (n.data, n.grad), shape='box', style='filled', fillcolor=fillcolor, width='0.1', height='0.1', fontsize='10')  
+            else :
+                with dot.subgraph(name='cluster4') as intn:
+                        intn.node(name=str(id(n)), label="data: %.4f\ngrad: %.4f" % (n.data, n.grad), shape='box', style='filled', fillcolor=fillcolor, width='0.1', height='0.1', fontsize='10')  
+        else:
+             with dot.subgraph(name='cluster4') as intn:
+                        intn.node(name=str(id(n)), label="data: %.4f\ngrad: %.4f" % (n.data, n.grad), shape='box', style='filled', fillcolor=fillcolor, width='0.1', height='0.1', fontsize='10')  
+          
+
+        #dot.node(name=str(id(n)), label="data: %.4f\ngrad: %.4f" % (n.data, n.grad), shape='box', style='filled', fillcolor=fillcolor, width='0.1', height='0.1', fontsize='10')
         if n._op:
-            dot.node(name=str(id(n)) + n._op, label=n._op, width='0.1', height='0.1', fontsize='10')
-            dot.edge(str(id(n)) + n._op, str(id(n)), minlen='1')
+            if hasattr(n, '_vis_color'):
+                if n._vis_color == 'grey91':
+                    with dot.subgraph(name='cluster2') as intn:
+                            intn.node(name=str(id(n)) + n._op, label=n._op, width='0.1', height='0.1', fontsize='10')
+                    dot.edge(str(id(n)) + n._op, str(id(n)), minlen='1')
+                else:
+                    with dot.subgraph(name='cluster4') as intn:
+                            intn.node(name=str(id(n)) + n._op, label=n._op, width='0.1', height='0.1', fontsize='10')
+                    dot.edge(str(id(n)) + n._op, str(id(n)), minlen='1')
+            else:
+                with dot.subgraph(name='cluster4') as intn:
+                            intn.node(name=str(id(n)) + n._op, label=n._op, width='0.1', height='0.1', fontsize='10')
+                dot.edge(str(id(n)) + n._op, str(id(n)), minlen='1')
 
     for n1, n2 in edges:
-        dot.edge(str(id(n1)), str(id(n2)) + n2._op, minlen='1')
+        #dot.edge(str(id(n1)), str(id(n2)) + n2._op, minlen='1')
+        if hasattr(n1, '_vis_color'):
+            if n1._vis_color == 'lightgreen' or n1._vis_color == 'blue':
+                dot.edge(str(id(n1)), str(id(n2)) + n2._op, minlen='1')
+                #dot.edge('dummy0',str(id(n1)),)
+            else:
+                dot.edge(str(id(n1)), str(id(n2)) + n2._op, minlen='1')
+        else:
+            dot.edge(str(id(n1)), str(id(n2)) + n2._op, minlen='1')
+        
 
     print("found a total of ", len(nodes), "nodes and", len(edges), "edges")
     print("saving graph to", outfile + "." + format)

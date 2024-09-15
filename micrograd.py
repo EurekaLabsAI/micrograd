@@ -3,7 +3,7 @@ Defines a simple autograd engine and uses it to classify points in the plane
 to 3 classes (red, green, blue) using a simple multilayer perceptron (MLP).
 """
 import math
-from utils import RNG, gen_data_yinyang, draw_dot, vis_color
+from utils import RNG, gen_data_yinyang, draw_dot, vis_color,vis_color_selfandChild,vis_color_entropy
 random = RNG(42)
 
 # -----------------------------------------------------------------------------
@@ -150,10 +150,11 @@ class Neuron(Module):
         self.b = Value(0)
         self.nonlin = nonlin
         # color the neuron params light green (only used in graphviz visualization)
-        vis_color([self.b] + self.w, "lightgreen")
+        vis_color(self.w, "lightgreen")
+        vis_color([self.b], "blue")
 
     def __call__(self, x):
-        act = sum((wi*xi for wi,xi in zip(self.w, x)), self.b)
+        act = sum((wi*xi for wi,xi in zip(self.w, x)),self.b)
         return act.tanh() if self.nonlin else act
 
     def parameters(self):
@@ -212,8 +213,11 @@ def cross_entropy(logits, target):
     probs = [x / denom for x in ex]
     # 4) log the probabilities at target
     logp = (probs[target]).log()
+    vis_color_selfandChild(logp, "grey91")
     # 5) the negative log likelihood loss (invert so we get a loss - lower is better)
     nll = -logp
+    vis_color_selfandChild(nll, "grey91")
+
     return nll
 
 # -----------------------------------------------------------------------------
@@ -262,11 +266,15 @@ optimizer = AdamW(model.parameters(), lr=1e-1, weight_decay=1e-4)
 def loss_fun(model, split):
     # evaluate the loss function on a given data split
     total_loss = Value(0.0)
+    vis_color(total_loss, "grey91") 
     for x, y in split:
         logits = model(x)
         loss = cross_entropy(logits, y)
+        vis_color(loss, "grey91") 
         total_loss = total_loss + loss
+        vis_color(total_loss, "grey91") 
     mean_loss = total_loss * (1.0 / len(split))
+    vis_color_selfandChild(mean_loss, "grey91") 
     return mean_loss
 
 # train the network
@@ -292,8 +300,11 @@ for step in range(num_steps):
 x, y = (Value(0.0), Value(0.0)), 0
 loss = loss_fun(model, [(x, y)])
 loss.backward()
+
 try:
-    vis_color(x, "lightblue") # color the inputs light blue in the visualization
+    vis_color(x, "lightblue") # color the inputs light blue in the visualization of inputs
+    vis_color(loss, "grey91") # color the inputs light grey in the visualization of loss
     draw_dot(loss)
+
 except Exception as e:
     print("graphviz not installed? skipped visualization")
