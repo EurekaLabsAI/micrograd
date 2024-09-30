@@ -14,7 +14,7 @@ class Value:
 
     def __init__(self, data, _prev=(), _op=''):
         self.data = data
-        self.grad = 0
+        self.grad = 0.0
         # internal variables used for autograd graph construction
         self._backward = lambda: None
         self._prev = _prev
@@ -249,51 +249,52 @@ class AdamW:
 
 # -----------------------------------------------------------------------------
 # let's train!
+if __name__ == '__main__':
+    # generate a dataset with 100 2-dimensional datapoints in 3 classes
+    train_split, val_split, test_split = gen_data_yinyang(random, n=100)
 
-# generate a dataset with 100 2-dimensional datapoints in 3 classes
-train_split, val_split, test_split = gen_data_yinyang(random, n=100)
+    # init the model: 2D inputs, 8 neurons, 3 outputs (logits)
+    model = MLP(2, [8, 3])
 
-# init the model: 2D inputs, 8 neurons, 3 outputs (logits)
-model = MLP(2, [8, 3])
+    # optimize using AdamW
+    optimizer = AdamW(model.parameters(), lr=1e-1, weight_decay=1e-4)
 
-# optimize using AdamW
-optimizer = AdamW(model.parameters(), lr=1e-1, weight_decay=1e-4)
+    def loss_fun(model, split):
+        # evaluate the loss function on a given data split
+        total_loss = Value(0.0)
+        for x, y in split:
+            logits = model(x)
+            loss = cross_entropy(logits, y)
+            total_loss = total_loss + loss
+        mean_loss = total_loss * (1.0 / len(split))
+        return mean_loss
 
-def loss_fun(model, split):
-    # evaluate the loss function on a given data split
-    total_loss = Value(0.0)
-    for x, y in split:
-        logits = model(x)
-        loss = cross_entropy(logits, y)
-        total_loss = total_loss + loss
-    mean_loss = total_loss * (1.0 / len(split))
-    return mean_loss
+    # train the network
+    num_steps = 100
+    for step in range(num_steps):
 
-# train the network
-num_steps = 100
-for step in range(num_steps):
+        # evaluate the validation split every few steps
+        if step % 10 == 0:
+            val_loss = loss_fun(model, val_split)
+            print(f"step {step+1}/{num_steps}, val loss {val_loss.data:.6f}")
 
-    # evaluate the validation split every few steps
-    if step % 10 == 0:
-        val_loss = loss_fun(model, val_split)
-        print(f"step {step+1}/{num_steps}, val loss {val_loss.data:.6f}")
+        # forward the network and the loss and all training datapoints
+        loss = loss_fun(model, train_split)
+        # backward pass (calculate the gradient of the loss w.r.t. the model parameters)
+        loss.backward()
+        # update model parameters
+        optimizer.step()
+        optimizer.zero_grad()
+        # print some stats
+        print(f"step {step+1}/{num_steps}, train loss {loss.data}")
 
-    # forward the network and the loss and all training datapoints
-    loss = loss_fun(model, train_split)
-    # backward pass (calculate the gradient of the loss w.r.t. the model parameters)
+    # (optional) visualization at the end: take origin (0,0) and draw the computational graph
+    x, y = (Value(0.0), Value(0.0)), 0
+    loss = loss_fun(model, [(x, y)])
     loss.backward()
-    # update model parameters
-    optimizer.step()
-    optimizer.zero_grad()
-    # print some stats
-    print(f"step {step+1}/{num_steps}, train loss {loss.data}")
+    try:
+        vis_color(x, "lightblue") # color the inputs light blue in the visualization
+        draw_dot(loss)
+    except Exception as e:
+        print("graphviz not installed? skipped visualization")
 
-# (optional) visualization at the end: take origin (0,0) and draw the computational graph
-x, y = (Value(0.0), Value(0.0)), 0
-loss = loss_fun(model, [(x, y)])
-loss.backward()
-try:
-    vis_color(x, "lightblue") # color the inputs light blue in the visualization
-    draw_dot(loss)
-except Exception as e:
-    print("graphviz not installed? skipped visualization")
