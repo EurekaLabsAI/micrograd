@@ -1,13 +1,20 @@
 CC = gcc
 CFLAGS = -Wall -Wextra
+LDFLAGS = -lm
 
-all: run
+all: micrograd #plot
 
 micrograd: micrograd.c
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
+	./$@
 
-run: micrograd
-	./$<
+# plot: micrograd
+# 	./micrograd
+# 	gnuplot plot_script.gp
 
+# clean:
+# 	rm -f micrograd plot_data.txt plot.png
 clean:
 	rm -f micrograd
+
+# .PHONY: all clean plot
